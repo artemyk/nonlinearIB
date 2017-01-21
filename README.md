@@ -1,0 +1,2 @@
+# nonlinearIB
+Nonlinear Information Bottleneck
