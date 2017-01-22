@@ -45,7 +45,7 @@ def get_logs(model, trn, tst, noiselayer, MIEstimateN=None):
             mitrn = mitrn[np.random.choice(mitrn.shape[0], MIEstimateN), :]
             mitst = mitst[np.random.choice(mitst.shape[0], MIEstimateN), :]
 
-        kde_logvar = noiselayer.mi_calculator.kde_logvar
+        kde_logvar = K.get_value(noiselayer.mi_calculator.kde_logvar)
         noise_logvar = noiselayer.logvar
         mi_obj_trn = MICalculator(noiselayer.mi_calculator.model_layers, mitrn, init_kde_logvar=kde_logvar)
         mi_obj_tst = MICalculator(noiselayer.mi_calculator.model_layers, mitst, init_kde_logvar=kde_logvar)
