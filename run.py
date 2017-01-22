@@ -26,7 +26,7 @@ import logs
 mnist_mlp_base = dict( # gets 1.28-1.29 training error
     do_MI = False,
     do_validate_on_test = True,
-    nbepoch             = 30,
+    nbepoch             = 60,
     batch_size          = 128,
     EntropyEstimateN    = 2000,
     #HIDDEN_DIMS = [800,800],
@@ -40,11 +40,8 @@ mnist_mlp_base = dict( # gets 1.28-1.29 training error
 
 
 opts = mnist_mlp_base.copy()
-# opts['do_MI'] = True
-
-def lrscheduler(epoch, half_time):
-    return 
-
+opts['do_MI'] = True
+opts['HIDDEN_DIMS'] = [10,]
 
 
 # Initialize MNIST dataset
@@ -55,10 +52,10 @@ X_test  = np.reshape(X_test , [X_test.shape[0] , -1]).astype('float32') / 255.
 Y_train = keras.utils.np_utils.to_categorical(y_train, nb_classes)
 Y_test  = keras.utils.np_utils.to_categorical(y_test, nb_classes)
 
-# X_train = X_train[0:10000]
-# X_test = X_test[0:10000]
-# Y_train = Y_train[0:10000]
-# Y_test = Y_test[0:10000]
+X_train = X_train[0:10000]
+X_test = X_test[0:10000]
+Y_train = Y_train[0:10000]
+Y_test = Y_test[0:10000]
 
 Dataset = namedtuple('Dataset',['X','Y','nb_classes'])
 trn = Dataset(X_train, Y_train, nb_classes)
@@ -93,13 +90,6 @@ if opts.get('do_MI', True):
         rows = np.random.choice(mi_samples.shape[0], opts['EntropyEstimateN'])
         mi_samples = mi_samples[rows,:]
 
-    def get_noise_input_func(pd):
-        import tensorflow as tf
-        d = tf.constant(pd)
-        for layerndx, layer in enumerate(model.layers):
-            d = layer(d)
-        return d
-        
     noiselayer = layers.NoiseLayer(init_logvar = -10, 
                                 logvar_trainable=opts['noise_logvar_grad_trainable'],
                                 test_phase_noise=opts.get('test_phase_noise', True))

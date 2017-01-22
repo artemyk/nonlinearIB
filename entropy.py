@@ -45,22 +45,22 @@ def kde_entropy_from_dists_loo(dists, N, dims, var):
     return nats2bits * h
 
 
-class MIComputer(object):
-    def __init__(self, inputvar, kdelayer, noiselayer):
-        self.input = inputvar
-        self.kdelayer = kdelayer
-        self.noiselayer = noiselayer
+# class MIComputer(object):
+#     def __init__(self, inputvar, kdelayer, noiselayer):
+#         self.input = inputvar
+#         self.kdelayer = kdelayer
+#         self.noiselayer = noiselayer
         
-    def get_h(self):
-        totalvar = K.exp(self.noiselayer.logvar)+K.exp(self.kdelayer.logvar)
-        return kde_entropy(self.input, totalvar)
+#     def get_h(self):
+#         totalvar = K.exp(self.noiselayer.logvar)+K.exp(self.kdelayer.logvar)
+#         return kde_entropy(self.input, totalvar)
     
-    def get_hcond(self):
-        return kde_condentropy(self.input, K.exp(self.noiselayer.logvar))
-        #return kde_entropy(self.noiselayer.get_noise(self.input), K.exp(self.noiselayer.logvar))
+#     def get_hcond(self):
+#         return kde_condentropy(self.input, K.exp(self.noiselayer.logvar))
+#         #return kde_entropy(self.noiselayer.get_noise(self.input), K.exp(self.noiselayer.logvar))
     
-    def get_mi(self):
-        return self.get_h() - self.get_hcond()
+#     def get_mi(self):
+#         return self.get_h() - self.get_hcond()
 
 
        

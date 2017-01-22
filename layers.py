@@ -3,48 +3,48 @@ from keras.layers import Layer
 from entropy import kde_entropy, kde_condentropy
 import tensorflow as tf
 
-class MIPenaltyLayer(Layer):
-    # with variable noise
-    def __init__(self, 
-                 input_layer,
-                 noise_layer,
-                 init_kde_logvar      = -5., 
-                 mi_samples           = None, 
-                 init_alpha           = 1.0,
-                 *kargs, **kwargs):
-        self.supports_masking = True
-        self.uses_learning_phase = True
+# class MIPenaltyLayer(Layer):
+#     # with variable noise
+#     def __init__(self, 
+#                  input_layer,
+#                  noise_layer,
+#                  init_kde_logvar      = -5., 
+#                  mi_samples           = None, 
+#                  init_alpha           = 1.0,
+#                  *kargs, **kwargs):
+#         self.supports_masking = True
+#         self.uses_learning_phase = True
         
-        self.init_alpha        = init_alpha
-        self.init_kde_logvar   = init_kde_logvar
-        self.alpha             = K.variable(0.0)
-        self.kde_logvar        = K.variable(0.0)
+#         self.init_alpha        = init_alpha
+#         self.init_kde_logvar   = init_kde_logvar
+#         self.alpha             = K.variable(0.0)
+#         self.kde_logvar        = K.variable(0.0)
 
-        self.mi_samples        = mi_samples
-        self.noise_layer = noise_layer
-        self.input_layer = input_layer
+#         self.mi_samples        = mi_samples
+#         self.noise_layer = noise_layer
+#         self.input_layer = input_layer
         
-        super(MIPenaltyLayer, self).__init__(*kargs, **kwargs)
+#         super(MIPenaltyLayer, self).__init__(*kargs, **kwargs)
         
-    def build(self, input_shape):
-        super(MIPenaltyLayer, self).build(input_shape)
-        K.set_value(self.kde_logvar, self.init_kde_logvar)
-        K.set_value(self.alpha, self.init_alpha)
+#     def build(self, input_shape):
+#         super(MIPenaltyLayer, self).build(input_shape)
+#         K.set_value(self.kde_logvar, self.init_kde_logvar)
+#         K.set_value(self.alpha, self.init_alpha)
 
-        d = tf.constant(pd)
-        for layerndx, layer in enumerate(model.layers):
-            d = layer(d)
-        return d
+#         d = tf.constant(pd)
+#         for layerndx, layer in enumerate(model.layers):
+#             d = layer(d)
+#         return d
 
             
-        current_var   = K.exp(self.noise_layer.logvar) + K.exp(self.kde_logvar)
-        current_input = K.function([self.input_layer.input], [self.noise_layer.input])([self.mi_samples])[0]
-        print current_input
-        mi = kde_entropy(current_input, current_var) - kde_condentropy(current_input, K.exp(self.noiselayer.logvar))
-        self.add_loss(K.in_train_phase(self.alpha * mi, K.variable(0.0)))
+#         current_var   = K.exp(self.noise_layer.logvar) + K.exp(self.kde_logvar)
+#         current_input = K.function([self.input_layer.input], [self.noise_layer.input])([self.mi_samples])[0]
+#         print current_input
+#         mi = kde_entropy(current_input, current_var) - kde_condentropy(current_input, K.exp(self.noiselayer.logvar))
+#         self.add_loss(K.in_train_phase(self.alpha * mi, K.variable(0.0)))
     
-    def call(self, x, mask=None):
-        return x
+#     def call(self, x, mask=None):
+#         return x
 
 
 class NoiseLayer(Layer):
@@ -53,6 +53,7 @@ class NoiseLayer(Layer):
                  init_logvar    = -10.,
                  logvar_trainable = True,
                  test_phase_noise = True,
+                 mi_calculator    = None, 
                  *kargs, **kwargs):
         self.supports_masking = True
 
@@ -60,11 +61,15 @@ class NoiseLayer(Layer):
             self.uses_learning_phase = True
         
         self.init_logvar = init_logvar
-        self.alpha             = K.variable(0.0)
+        self.alpha       = K.variable(0.0)
         self.logvar      = K.variable(0.0)
         
         self.logvar_trainable = logvar_trainable
         self.test_phase_noise = test_phase_noise
+
+        self.mi_calculator = mi_calculator
+        if self.mi_calculator is not None:
+            self.mi_calculator.set_noise_layer = self
         
         super(NoiseLayer, self).__init__(*kargs, **kwargs)
         
@@ -76,6 +81,9 @@ class NoiseLayer(Layer):
             self.trainable_weights = [self.logvar,]
         else:
             self.trainable_weights = []
+
+        if self.mi_calculator is not None:
+            self.add_loss(self.mi_calculator.get_mi())
         
     def get_noise(self, x):
         return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x), mean=0., std=1)
@@ -91,18 +99,26 @@ class MICalculator(object):
         self.init_kde_logvar = self.init_kde_logvar
         self.kde_logvar = K.variable(self.init_kde_logvar)
 
-        # Last layer should be NoiseLayer
-        self.noise_layer = model.layers[-1]
-        if not isinstance(self.noise_layer, NoiseLayer):
-            raise Exception("Last layer of model should be NoiseLayer")
+        # # Last layer should be NoiseLayer
+        # self.noise_layer = model.layers[-1]
+        # if not isinstance(self.noise_layer, NoiseLayer):
+        #     raise Exception("Last layer of model should be NoiseLayer")
 
         import tensorflow as tf
         noise_layer_input = tf.constant(input_samples)
-        for layerndx, layer in enumerate(model.layers[:-1]):
+        for layerndx, layer in enumerate(model.layers):
             noise_layer_input = layer(noise_layer_input)
         self.noise_layer_input = self.noise_layer
 
+        self.noise_layer = None
+
+    def set_noise_layer(self, noise_layer):
+        self.noise_layer = noise_layer
+
     def get_mi(self):
+        if self.noise_layer is None:
+            raise Exception('Need to initialize noise_layer attribute')
+
         current_var   = K.exp(noise_layer.logvar) + K.exp(self.kde_logvar)
         h = kde_entropy(self.noise_layer_input, current_var)
         hcond = kde_condentropy(self.noise_layer_input, K.exp(self.noise_layer.logvar))
