@@ -108,7 +108,8 @@ if opts.get('do_MI', True):
     noiselayer = trainable.NoiseLayer(init_logvar = -10., 
                                 logvar_trainable=opts['noise_logvar_grad_trainable'],
                                 test_phase_noise=opts.get('test_phase_noise', True),
-                                mi_calculator=micalculator)
+                                mi_calculator=micalculator,
+                                init_alpha=args.alpha)
     model.add(noiselayer)
 
     cbs.append(trainable.KDETrain(mi_calculator=micalculator))
