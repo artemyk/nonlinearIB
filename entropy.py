@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 import keras.backend as K
 
-nats2bits = 1.0/np.log(2)
+nats2bits = np.array(1.0/np.log(2), dtype='float32')
 
 def logsumexp(mx, axis):
     cmax = K.max(mx, axis=axis)
