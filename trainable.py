@@ -41,7 +41,7 @@ class NoiseLayer(Layer):
             self.trainable_weights = []
 
         if self.mi_calculator is not None:
-            self.add_loss(K.in_train_phase(self.mi_calculator.get_mi(self.logvar), K.variable(0.0)))
+            self.add_loss(K.in_train_phase(self.alpha*self.mi_calculator.get_mi(self.logvar), K.variable(0.0)))
         
     def get_noise(self, x):
         return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x), mean=0., std=1)

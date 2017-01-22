@@ -1,8 +1,24 @@
 # Requires: Keras-1.2.1, tensorflow-0.12.1 or theano 0.8.2
-if False:
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Run nonlinear IB on MNIST dataset')
+parser.add_argument('--alpha' , type=float, default=0.0, help='alpha hyperparameter value')
+parser.add_argument('--engine', default='theano', choices=['tensorflow','theano'],
+                    help='Deep learning engine to use (defalt: theano)')
+parser.add_argument('--trainN', type=int, help='Number of training data samples')
+parser.add_argument('--testN', type=int, help='Number of testing data samples')
+parser.add_argument('--miN', type=int, default=1000, help='Number of training data samples to use for estimating MI')
+args = parser.parse_args()
+
+import os
+if args.engine == 'theano':
     import theano
-    theano.config.optimizer='fast_compile'
+    theano.config.optimizer = 'fast_compile'
+    theano.config.floatX    = 'float32'
     import os ; os.environ['KERAS_BACKEND']='theano'
+else:
+    import os ; os.environ['KERAS_BACKEND']='tensorflow'
 
 import numpy as np
 
@@ -24,7 +40,6 @@ mnist_mlp_base = dict( # gets 1.28-1.29 training error
     do_validate_on_test = True,
     nbepoch             = 60,
     batch_size          = 128,
-    MIEstimateN         = 1000,
     #HIDDEN_DIMS = [800,800],
     #hidden_acts = ['relu','relu'],
     #HIDDEN_DIMS    = [800,800,256],
@@ -47,14 +62,13 @@ Y_train = keras.utils.np_utils.to_categorical(y_train, nb_classes)
 Y_test  = keras.utils.np_utils.to_categorical(y_test, nb_classes)
 
 
-if True:
-    X_train = X_train[0:1000]
-    X_test = X_test[0:1000]
-    Y_train = Y_train[0:1000]
-    Y_test = Y_test[0:1000]
-    opts['MIEstimateN'] = [100,]
-    opts['HIDDEN_DIMS'] = [10,]
+if args.trainN is not None:
+    X_train = X_train[0:args.trainN]
+    Y_train = Y_train[0:args.trainN]
 
+if args.testN is not None:
+    X_test = X_test[0:args.testN]
+    Y_test = Y_test[0:args.testN]
 
 
 Dataset = namedtuple('Dataset',['X','Y','nb_classes'])
@@ -86,13 +100,12 @@ cbs = [keras.callbacks.LearningRateScheduler(
 if opts.get('do_MI', True):
     mi_samples = trn.X       # input samples to use for estimating 
                              # mutual information b/w input and hidden layers
-    if opts['MIEstimateN'] is not None:
-        rows = np.random.choice(mi_samples.shape[0], opts['MIEstimateN'])
-        mi_samples = mi_samples[rows,:]
+    rows = np.random.choice(mi_samples.shape[0], args.miN)
+    mi_samples = mi_samples[rows,:]
 
     micalculator = trainable.MICalculator(model.layers[:], mi_samples, init_kde_logvar=-5.)
 
-    noiselayer = trainable.NoiseLayer(init_logvar = -10, 
+    noiselayer = trainable.NoiseLayer(init_logvar = -10., 
                                 logvar_trainable=opts['noise_logvar_grad_trainable'],
                                 test_phase_noise=opts.get('test_phase_noise', True),
                                 mi_calculator=micalculator)
@@ -134,4 +147,4 @@ model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['ac
     
 hist = model.fit(**fit_args)
 
-reporting.get_logs(model, trn, tst, noiselayer, opts.get('MIEstimateN', None))
+reporting.get_logs(model, trn, tst, noiselayer, args.miN)
