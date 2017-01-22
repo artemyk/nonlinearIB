@@ -28,7 +28,7 @@ mnist_mlp_base = dict( # gets 1.28-1.29 training error
     do_validate_on_test = True,
     nbepoch             = 60,
     batch_size          = 128,
-    EntropyEstimateN    = 2000,
+    MIEstimateN         = 2000,
     #HIDDEN_DIMS = [800,800],
     #hidden_acts = ['relu','relu'],
     #HIDDEN_DIMS    = [800,800,256],
@@ -42,6 +42,7 @@ mnist_mlp_base = dict( # gets 1.28-1.29 training error
 opts = mnist_mlp_base.copy()
 opts['do_MI'] = True
 opts['HIDDEN_DIMS'] = [10,]
+opts['MIEstimateN'] = [100,]
 
 
 # Initialize MNIST dataset
@@ -79,30 +80,33 @@ for hndx, hdim in enumerate(opts['HIDDEN_DIMS']):
     
 kdelayer, noiselayer, micomputer = None, None, None
     
-callbacks = [keras.callbacks.LearningRateScheduler(
+cbs = [keras.callbacks.LearningRateScheduler(
         lambda epoch: 0.001 * 0.5**np.floor(epoch / opts['lr_half_time'])
     ),]
 
 if opts.get('do_MI', True):
     mi_samples = trn.X       # input samples to use for estimating 
                              # mutual information b/w input and hidden layers
-    if opts['EntropyEstimateN'] is not None:
-        rows = np.random.choice(mi_samples.shape[0], opts['EntropyEstimateN'])
+    if opts['MIEstimateN'] is not None:
+        rows = np.random.choice(mi_samples.shape[0], opts['MIEstimateN'])
         mi_samples = mi_samples[rows,:]
+
+    micalculator = layers.MICalculator(model, mi_samples, init_kde_logvar=-5.)
 
     noiselayer = layers.NoiseLayer(init_logvar = -10, 
                                 logvar_trainable=opts['noise_logvar_grad_trainable'],
-                                test_phase_noise=opts.get('test_phase_noise', True))
+                                test_phase_noise=opts.get('test_phase_noise', True),
+                                mi_calculator=micalculator)
     model.add(noiselayer)
 
-    mipenalty = layers.MIPenaltyLayer(input_layer = model.layers[0], 
-        noise_layer = noiselayer, init_kde_logvar=-5., init_alpha=0., mi_samples=mi_samples)
-    model.add(mipenalty)
+    #mipenalty = layers.MIPenaltyLayer(input_layer = model.layers[0], 
+    #    noise_layer = noiselayer, init_kde_logvar=-5., init_alpha=0., mi_samples=mi_samples)
+    #model.add(mipenalty)
 
-    callbacks.append(miregularizer2.KDETrain(entropy_train_data=regularize_mi_input, kdelayer=kdelayer))
-    if not opts['noise_logvar_grad_trainable']:
-        callbacks.append(miregularizer2.NoiseTrain(traindata=trn, noiselayer=noiselayer))
-    callbacks.append(miregularizer2.ReportVars(noiselayer=noiselayer, kdelayer=kdelayer))
+    #cbs.append(miregularizer2.KDETrain(entropy_train_data=regularize_mi_input, kdelayer=kdelayer))
+    #if not opts['noise_logvar_grad_trainable']:
+    #    cbs.append(miregularizer2.NoiseTrain(traindata=trn, noiselayer=noiselayer))
+    cbs.append(callbacks.ReportVars(noiselayer=noiselayer))
 
 model.add(Dense(trn.nb_classes, init='glorot_uniform', activation='softmax'))
 
@@ -114,7 +118,7 @@ else:
     validation_split = 0.2
     validation_data = None
     from keras.callbacks import EarlyStopping
-    callbacks.append( EarlyStopping(monitor='val_loss', patience=opts['patiencelevel']) )
+    cbs.append( EarlyStopping(monitor='val_loss', patience=opts['patiencelevel']) )
     
 fit_args = dict(
     x          = trn.X,
@@ -124,15 +128,11 @@ fit_args = dict(
     nb_epoch   = opts['nbepoch'],
     validation_split = validation_split,
     validation_data  = validation_data,
-    callbacks  = callbacks,
+    callbacks  = cbs,
 )
 
 optimizer = opts.get('optimizer','adam')
 print "Using optimizer", optimizer
 model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-if noiselayer is not None and hasattr(noiselayer, 'logvar'):
-    K.set_value(noiselayer.logvar, -10)
-if kdelayer is not None and hasattr(kdelayer, 'logvar'):
-    K.set_value(kdelayer.logvar, -10)
     
 hist = model.fit(**fit_args)

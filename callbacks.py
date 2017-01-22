@@ -1,3 +1,4 @@
+import keras.backend as K
 from keras.callbacks import Callback
 
  
@@ -89,13 +90,12 @@ class KDETrain(Callback):
 
 
 class ReportVars(Callback):
-    def __init__(self, kdelayer, noiselayer, *kargs, **kwargs):
+    def __init__(self, noiselayer, *kargs, **kwargs):
         super(ReportVars, self).__init__(*kargs, **kwargs)
         self.noiselayer = noiselayer
-        self.kdelayer = kdelayer
         
     def on_epoch_end(self, epoch, logs={}):
-        lv1 = K.get_value(self.kdelayer.logvar)
+        lv1 = K.get_value(self.noiselayer.mi_calculator.kde_logvar)
         lv2 = K.get_value(self.noiselayer.logvar)
         logs['kdeLV']   = lv1
         logs['noiseLV'] = lv2

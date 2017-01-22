@@ -68,8 +68,6 @@ class NoiseLayer(Layer):
         self.test_phase_noise = test_phase_noise
 
         self.mi_calculator = mi_calculator
-        if self.mi_calculator is not None:
-            self.mi_calculator.set_noise_layer = self
         
         super(NoiseLayer, self).__init__(*kargs, **kwargs)
         
@@ -83,6 +81,7 @@ class NoiseLayer(Layer):
             self.trainable_weights = []
 
         if self.mi_calculator is not None:
+            self.mi_calculator.set_noise_layer(self)
             self.add_loss(self.mi_calculator.get_mi())
         
     def get_noise(self, x):
@@ -95,9 +94,9 @@ class NoiseLayer(Layer):
             return K.in_train_phase(x+self.get_noise(x), x)
 
 class MICalculator(object):
-    def __init__(self, model, input_samples, init_kde_logvar=-5.):
-        self.init_kde_logvar = self.init_kde_logvar
-        self.kde_logvar = K.variable(self.init_kde_logvar)
+    def __init__(self, model, input_samples, init_kde_logvar=-5., init_alpha=0.0):
+        self.init_kde_logvar = init_kde_logvar
+        self.init_alpha      = init_alpha
 
         # # Last layer should be NoiseLayer
         # self.noise_layer = model.layers[-1]
@@ -108,20 +107,22 @@ class MICalculator(object):
         noise_layer_input = tf.constant(input_samples)
         for layerndx, layer in enumerate(model.layers):
             noise_layer_input = layer(noise_layer_input)
-        self.noise_layer_input = self.noise_layer
-
-        self.noise_layer = None
+        self.noise_layer_input = noise_layer_input
 
     def set_noise_layer(self, noise_layer):
         self.noise_layer = noise_layer
+        self.alpha = K.variable(self.init_alpha)
+        self.kde_logvar = K.variable(self.init_kde_logvar)
+
 
     def get_mi(self):
         if self.noise_layer is None:
             raise Exception('Need to initialize noise_layer attribute')
 
-        current_var   = K.exp(noise_layer.logvar) + K.exp(self.kde_logvar)
+        current_var   = K.exp(self.noise_layer.logvar) + K.exp(self.kde_logvar)
         h = kde_entropy(self.noise_layer_input, current_var)
         hcond = kde_condentropy(self.noise_layer_input, K.exp(self.noise_layer.logvar))
+        mi = h - hcond
         return self.alpha * mi
 #        self.add_loss(K.in_train_phase(self.alpha * mi, K.variable(0.0)))
 
