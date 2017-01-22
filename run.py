@@ -1,6 +1,9 @@
-# Requires: Keras-1.2.1, tensorflow-0.12.1
+# Requires: Keras-1.2.1, tensorflow-0.12.1 or theano 0.8.2
+if False:
+    import theano
+    theano.config.optimizer='fast_compile'
+    import os ; os.environ['KERAS_BACKEND']='theano'
 
-#import os ; os.environ['KERAS_BACKEND']='theano'
 import numpy as np
 
 from collections import namedtuple
@@ -13,22 +16,15 @@ import logging
 logging.getLogger('keras').setLevel(logging.INFO)
 
 
-# import keras.backend as K
-#%run init.ipy
-
-#from utils import *
-#import miregularizer2
-
-import layers
-import callbacks
-import logs
+import trainable
+import reporting
 
 mnist_mlp_base = dict( # gets 1.28-1.29 training error
     do_MI = False,
     do_validate_on_test = True,
     nbepoch             = 60,
     batch_size          = 128,
-    MIEstimateN         = 2000,
+    MIEstimateN         = 1000,
     #HIDDEN_DIMS = [800,800],
     #hidden_acts = ['relu','relu'],
     #HIDDEN_DIMS    = [800,800,256],
@@ -41,9 +37,6 @@ mnist_mlp_base = dict( # gets 1.28-1.29 training error
 
 opts = mnist_mlp_base.copy()
 opts['do_MI'] = True
-opts['HIDDEN_DIMS'] = [10,]
-opts['MIEstimateN'] = [100,]
-
 
 # Initialize MNIST dataset
 nb_classes = 10
@@ -53,10 +46,16 @@ X_test  = np.reshape(X_test , [X_test.shape[0] , -1]).astype('float32') / 255.
 Y_train = keras.utils.np_utils.to_categorical(y_train, nb_classes)
 Y_test  = keras.utils.np_utils.to_categorical(y_test, nb_classes)
 
-X_train = X_train[0:10000]
-X_test = X_test[0:10000]
-Y_train = Y_train[0:10000]
-Y_test = Y_test[0:10000]
+
+if True:
+    X_train = X_train[0:1000]
+    X_test = X_test[0:1000]
+    Y_train = Y_train[0:1000]
+    Y_test = Y_test[0:1000]
+    opts['MIEstimateN'] = [100,]
+    opts['HIDDEN_DIMS'] = [10,]
+
+
 
 Dataset = namedtuple('Dataset',['X','Y','nb_classes'])
 trn = Dataset(X_train, Y_train, nb_classes)
@@ -91,22 +90,18 @@ if opts.get('do_MI', True):
         rows = np.random.choice(mi_samples.shape[0], opts['MIEstimateN'])
         mi_samples = mi_samples[rows,:]
 
-    micalculator = layers.MICalculator(model, mi_samples, init_kde_logvar=-5.)
+    micalculator = trainable.MICalculator(model.layers[:], mi_samples, init_kde_logvar=-5.)
 
-    noiselayer = layers.NoiseLayer(init_logvar = -10, 
+    noiselayer = trainable.NoiseLayer(init_logvar = -10, 
                                 logvar_trainable=opts['noise_logvar_grad_trainable'],
                                 test_phase_noise=opts.get('test_phase_noise', True),
                                 mi_calculator=micalculator)
     model.add(noiselayer)
 
-    #mipenalty = layers.MIPenaltyLayer(input_layer = model.layers[0], 
-    #    noise_layer = noiselayer, init_kde_logvar=-5., init_alpha=0., mi_samples=mi_samples)
-    #model.add(mipenalty)
-
-    #cbs.append(miregularizer2.KDETrain(entropy_train_data=regularize_mi_input, kdelayer=kdelayer))
+    cbs.append(trainable.KDETrain(mi_calculator=micalculator))
     #if not opts['noise_logvar_grad_trainable']:
     #    cbs.append(miregularizer2.NoiseTrain(traindata=trn, noiselayer=noiselayer))
-    cbs.append(callbacks.ReportVars(noiselayer=noiselayer))
+    cbs.append(reporting.ReportVars(noiselayer=noiselayer))
 
 model.add(Dense(trn.nb_classes, init='glorot_uniform', activation='softmax'))
 
@@ -131,8 +126,12 @@ fit_args = dict(
     callbacks  = cbs,
 )
 
+
 optimizer = opts.get('optimizer','adam')
 print "Using optimizer", optimizer
 model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
     
 hist = model.fit(**fit_args)
+
+reporting.get_logs(model, trn, tst, noiselayer, opts.get('MIEstimateN', None))
