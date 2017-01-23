@@ -214,7 +214,7 @@ fname = "models/fitmodel-%s-%0.5f.h5"%(args.mode,args.beta)
 print "saving to %s"%fname
 model.save_weights(fname)
 
-savedhistfname='models/savedhist-%s-%0.5f.h5"%(args.mode,args.beta)
+savedhistfname="models/savedhist-%s-%0.5f.h5"%(args.mode,args.beta)
 with open(savedhistfname, 'wb') as f:
     cPickle.dump({'history':hist.history,  'endlogs': logs}, f)
     print 'updated', savedhistfname
