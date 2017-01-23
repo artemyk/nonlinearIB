@@ -2,19 +2,28 @@
 
 import argparse
 
-parser = argparse.ArgumentParser(description='Run nonlinear IB on MNIST dataset')
+parser = argparse.ArgumentParser(description='Run nonlinear IB on MNIST dataset',
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--backend', default='theano', choices=['tensorflow','theano'],
-                    help='Deep learning backend to use (defalt: theano)')
-parser.add_argument('--mode', choices=['regular','vIB','nlIB'], default='nlIB',
+                    help='Deep learning backend to use')
+parser.add_argument('--mode', choices=['regular','dropout','vIB','nlIB'], default='nlIB',
     help='Regularization mode')
+parser.add_argument('--nb_mc_samples', type=int, default=1, help='Number of MC samples')
 parser.add_argument('--nb_epoch', type=int, default=60, help='Number of epochs')
 parser.add_argument('--beta' , type=float, default=0.0, help='beta hyperparameter value')
-parser.add_argument('--dropout', type=bool, default=False, help='Do dropout or not?')
-parser.add_argument('--maxnorm', type=float, help='Max-norm constraint to impose')
+parser.add_argument('--init_noise_logvar', type=float, default=-6., help='Initialize log variance of noise')
+#parser.add_argument('--maxnorm', type=float, help='Max-norm constraint to impose')
 parser.add_argument('--trainN', type=int, help='Number of training data samples')
 parser.add_argument('--testN', type=int, help='Number of testing data samples')
 parser.add_argument('--miN', type=int, default=1000, help='Number of training data samples to use for estimating MI')
+parser.add_argument('--batch_size', type=int, default=128, help='Mini-batch size')
+parser.add_argument('--optimizer', choices=['sgd','rmsprop','adagrad','adam'], default='adam',
+                    help='Which optimizer to use')
+parser.add_argument('--lr_halftime', type=int, default=10, help='Number of iterations before dropping learning rate in half')
+
 args = parser.parse_args()
+
+print '# ARGS:', vars(args)
 
 import os
 if args.backend == 'theano':
@@ -31,32 +40,33 @@ from collections import namedtuple
 import keras
 import keras.datasets.mnist
 import keras.utils.np_utils
-from keras.models import Sequential
-from keras.layers.core import Dense
+from keras.models import Model
+from keras.layers import Input, Dense, Dropout, merge
 import logging    
 logging.getLogger('keras').setLevel(logging.INFO)
-
 
 import training
 import layers
 import reporting
 
 VALIDATE_ON_TEST = True
+noise_logvar_grad_trainable = True
 
-mnist_mlp_base = dict( # gets 1.28-1.29 training error
-    batch_size          = 128,
-    #HIDDEN_DIMS = [800,800],
-    #hidden_acts = ['relu','relu'],
-    #HIDDEN_DIMS    = [800,800,256],
-    HIDDEN_DIMS    = [800,800,256],
-    lr_half_time   = 10,
-    hidden_acts    = ['relu','relu','linear'],
-    noise_logvar_grad_trainable = True,
-)
+if args.mode == 'dropout':
+    HIDDEN_DIMS = [800, 800]
+    HIDDEN_ACTS = ['relu','relu']
+elif args.mode == 'vIB':
+    #HIDDEN_DIMS = [1024, 1024, 512]
+    HIDDEN_DIMS = [1024, 1024, 4]
+    
+    HIDDEN_ACTS = ['relu','relu', 'linear']
+else:
+    HIDDEN_DIMS = [800, 800, 2]
+    #HIDDEN_DIMS = [800, 800, 256]
+    #HIDDEN_ACTS = ['relu','relu', 'linear']
+    HIDDEN_ACTS = ['tanh','tanh','linear']
 
-
-opts = mnist_mlp_base.copy()
-opts['do_MI'] = True
+print 'HIDDEN_DIMS=%s, HIDDEN_ACTS=%s' % (HIDDEN_DIMS, HIDDEN_ACTS)
 
 # Initialize MNIST dataset
 nb_classes = 10
@@ -80,70 +90,98 @@ Dataset = namedtuple('Dataset',['X','Y','nb_classes'])
 trn = Dataset(X_train, Y_train, nb_classes)
 tst = Dataset(X_test , Y_test, nb_classes)
 
+DIMS = trn.X.shape[1]
+
 del X_train, X_test, Y_train, Y_test, y_train, y_test
 # ***************************
 
 
 # Build model
-model = Sequential()
+inputs = Input(shape=(DIMS,))
+model_layers = []
 
-for hndx, hdim in enumerate(opts['HIDDEN_DIMS']):
-    layer_args = {}
-    if hndx == 0:
-        layer_args['input_dim'] = trn.X.shape[1]
-    layer_args['activation'] = opts['hidden_acts'][hndx]
-    if 'hidden_inits' in opts:
-        layer_args['init'] = opts['hidden_inits'][hndx]
+for hndx, hdim in enumerate(HIDDEN_DIMS):
+    if args.mode == 'dropout':
+        model_layers.append( Dropout(.2 if hndx == 0 else .5) )
+            
+    layer_args = {}    
+    layer_args['activation'] = HIDDEN_ACTS[hndx]
+    if layer_args['activation'] == 'relu':
+        layer_args['init'] = 'he_uniform' 
     else:
-        if layer_args['activation'] == 'relu':
-            layer_args['init'] = 'he_uniform' 
-        else:
-            layer_args['init'] = 'glorot_uniform'
-    if args.maxnorm is not None:
-        import keras.constraints
-        layer_args['W_constraint'] = keras.constraints.maxnorm(opts.maxnorm)
+        layer_args['init'] = 'glorot_uniform'
+    #if args.maxnorm is not None:
+    #    import keras.constraints
+    #    layer_args['W_constraint'] = keras.constraints.maxnorm(args.maxnorm)
 
-    model.add(Dense(hdim, **layer_args))
-    if args.dropout:
-        from keras.layers.core import Dropout
-        model.add(Dropout(.2 if hndx == 0 else .5))
+    model_layers.append( Dense(hdim, **layer_args) )
 
+def lrscheduler(epoch):
+    lr = 0.001 * 0.5**np.floor(epoch / args.lr_halftime)
+    lr = max(lr, 1e-5)
+    print 'Learning rate: %.7f' % lr
+    return lr
 
+cbs = [keras.callbacks.LearningRateScheduler(lrscheduler),]
+
+if args.mode in ['nlIB', 'vIB']:
     
-kdelayer, noiselayer, micomputer = None, None, None
-    
-cbs = [keras.callbacks.LearningRateScheduler(
-        lambda epoch: max(0.001 * 0.5**np.floor(epoch / opts['lr_half_time']), 1e-5)
-    ),]
-
-if args.mode == 'regular':
-    None
-
-elif args.mode == 'nlIB':
     mi_samples = trn.X       # input samples to use for estimating 
                              # mutual information b/w input and hidden layers
     rows = np.random.choice(mi_samples.shape[0], args.miN)
     mi_samples = mi_samples[rows,:]
 
-    micalculator = layers.MICalculator(model.layers[:], mi_samples, init_kde_logvar=-5.)
-
-    noiselayer = layers.NoiseLayer(init_logvar = -10., 
-                                logvar_trainable=opts['noise_logvar_grad_trainable'],
-                                test_phase_noise=opts.get('test_phase_noise', True),
-                                mi_calculator=micalculator,
-                                init_beta=args.beta)
-    model.add(noiselayer)
-
-    cbs.append(training.KDETrain(mi_calculator=micalculator))
+    if args.mode == 'nlIB':
+        micalculator = layers.MICalculator(args.beta, model_layers, input_samples=mi_samples, init_kde_logvar=-5.)
+        cbs.append(training.KDETrain(mi_calculator=micalculator))
+        noiselayer = layers.NoiseLayer(init_logvar = args.init_noise_logvar, 
+                                    logvar_trainable=noise_logvar_grad_trainable)
+        #,
+        #                            activity_regularizer=micalculator)
+    else:
+        micalculator = layers.MICalculatorVIB(args.beta)
+        noiselayer = layers.NoiseLayerVIB(mean_dims=HIDDEN_DIMS[-1]/2, test_phase_noise=True)
+        
+    micalculator.set_noiselayer(noiselayer)
+    
+    curlayer = inputs
+    for l in model_layers:
+        curlayer = l(curlayer)
+    noise_input_layer = layers.IdentityMap(activity_regularizer=micalculator)(curlayer)
+    del curlayer
+    
+    #decoding_hidden_layer = None
+    #decoding_hidden_layer = Dense(trn.nb_classes, init='he_uniform', activation='relu')
+    prediction_layer = Dense(trn.nb_classes, init='glorot_uniform', activation='softmax')
+    if args.nb_mc_samples > 1:
+        predictions = []
+        targets = []
+        targets_val = []
+        for ndx in range(args.nb_mc_samples):
+            predictions.append(prediction_layer(noiselayer(noise_input_layer)))
+            targets.append(trn.Y)
+            targets_val.append(tst.Y)
+    else:
+        #cur_layer = 
+        predictions = prediction_layer(noiselayer(noise_input_layer))
+            
+        targets = trn.Y
+        targets_val = tst.Y
+        
     #if not opts['noise_logvar_grad_trainable']:
     #    cbs.append(training.NoiseTrain(traindata=trn, noiselayer=noiselayer))
-    cbs.append(reporting.ReportVars(noiselayer=noiselayer))
+    cbs.append(reporting.ReportVars(noiselayer=noiselayer, micalculator=micalculator))
 
-model.add(Dense(trn.nb_classes, init='glorot_uniform', activation='softmax'))
+else:
+    curlayer = inputs
+    for l in model_layers:
+        curlayer = l(curlayer)
+    predictions = Dense(trn.nb_classes, init='glorot_uniform', activation='softmax')(curlayer)
+
 
 if VALIDATE_ON_TEST:
     validation_split = None
-    validation_data = (tst.X, tst.Y)
+    validation_data = (tst.X, targets_val)
     early_stopping = None
 else:
     validation_split = 0.2
@@ -153,21 +191,33 @@ else:
     
 fit_args = dict(
     x          = trn.X,
-    y          = trn.Y,
+    y          = targets,
     verbose    = 2,
-    batch_size = opts['batch_size'],
+    batch_size = args.batch_size,
     nb_epoch   = args.nb_epoch,
     validation_split = validation_split,
     validation_data  = validation_data,
     callbacks  = cbs,
 )
 
-
-optimizer = opts.get('optimizer','adam')
-print "Using optimizer", optimizer
-model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-
+model = Model(input=inputs, output=predictions)
+model.compile(loss='categorical_crossentropy', optimizer=args.optimizer, metrics=['accuracy'])
     
 hist = model.fit(**fit_args)
 
-reporting.get_logs(model, trn, tst, noiselayer, args.miN)
+# Print and save results
+print '# ENDARGS:', vars(args)
+print '# ENDRESULTS:',
+logs = reporting.get_logs(model, trn, tst, noiselayer=noiselayer, micalculator=micalculator, MIEstimateN=args.miN)
+
+fname = "models/fitmodel-%s-%0.5f.h5"%(args.mode,args.beta)
+print "saving to %s"%fname
+model.save_weights(fname)
+
+savedhistfname='models/savedhist-%s-%0.5f.h5"%(args.mode,args.beta)
+with open(savedhistfname, 'wb') as f:
+    cPickle.dump({'history':hist.history,  'endlogs': logs}, f)
+    print 'updated', savedhistfname
+
+
+

@@ -51,7 +51,6 @@ class KDETrain(Callback):
         self.mi_calculator = mi_calculator
         
     def on_train_begin(self, logs={}):
-        #self.nlayerinput = lambda x: K.function([self.model.layers[0].input], [self.kdelayer.input])([x])[0]
         N, dims = self.mi_calculator.input_samples.shape
         Kdists = K.placeholder(ndim=2)
         Klogvar = K.placeholder(ndim=0)
