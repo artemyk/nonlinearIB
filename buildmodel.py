@@ -10,8 +10,6 @@ import layers
 import reporting
 
 
-
-
 def get_mnist(trainN=None, testN=None):
     # Initialize MNIST dataset
     nb_classes = 10
@@ -99,8 +97,6 @@ def buildmodel(opts, trn):
 
         #if not opts['noise_logvar_grad_trainable']:
         #    cbs.append(training.NoiseTrain(traindata=trn, noiselayer=noiselayer))
-        cbs.append(reporting.ReportVars(noiselayer=noiselayer, micalculator=micalculator))
-
     else:
         cur_layer = inputs
         for l in model_layers:

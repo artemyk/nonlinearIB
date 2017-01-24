@@ -11,7 +11,6 @@ class NoiseLayer(Layer):
                  init_logvar    = -10.,
                  logvar_trainable = True,
                  test_phase_noise = False,
-                 #activity_regularizer=None,
                  *kargs, **kwargs):
         self.supports_masking = True
         self.uses_learning_phase = True
@@ -22,8 +21,6 @@ class NoiseLayer(Layer):
         self.logvar_trainable = logvar_trainable
         self.test_phase_noise = test_phase_noise
         
-        #self.activity_regularizer = regularizers.get(activity_regularizer)
-
         super(NoiseLayer, self).__init__(*kargs, **kwargs)
         
     def build(self, input_shape):
@@ -54,7 +51,7 @@ class IdentityMap(Layer):
         return x
         
 class NoiseLayerVIB(Layer):
-    # with variable noise
+    # Implementation of Deep Variational Information Bottleneck, Alemi et al.
     def __init__(self, 
                  mean_dims,
                  test_phase_noise = False,
@@ -74,8 +71,9 @@ class NoiseLayerVIB(Layer):
         return (input_shape[0], self.mean_dims)
     
     def get_means_vars(self, x):
-        means, rawvars = x[:,:self.mean_dims], x[:,self.mean_dims:]
-        cvars = K.log(1+K.exp(rawvars - 5.))
+        means, rawsigmas = x[:,:self.mean_dims], x[:,self.mean_dims:]
+        sigmas = K.log(1+K.exp(rawsigmas - 5.))
+        cvars = K.square(sigmas)
         return means, cvars
     
     def call(self, x, mask=None):
@@ -91,6 +89,7 @@ class MIRegularizerBase(regularizers.Regularizer):
         return K.in_train_phase(self.beta * self.get_mi(x), K.variable(0.0))
 
 class MICalculatorVIB(MIRegularizerBase):
+    # Implementation of Deep Variational Information Bottleneck, Alemi et al.
     def __init__(self, beta):
         self.beta = beta
         super(MICalculatorVIB, self).__init__()
@@ -99,12 +98,11 @@ class MICalculatorVIB(MIRegularizerBase):
         self.noiselayer = noiselayer
         
     def get_mi(self, x):
-        # 0.5 * [tr(Sigma) + ||u_1||^2 - k - ln ( |Sigma 0| )]
+        # KL(N(u,Sigma) || N(0,1)) = 0.5 * [tr(Sigma) + ||u||^2 - k - ln ( |Sigma 0| )]
         dims = self.noiselayer.mean_dims
         means, cvars = self.noiselayer.get_means_vars(x)
         norms = K.square(means)
         norms = K.sum(norms, axis=1)
-        #v = 0.5 * (dims * K.exp(self.noise_logvar) + norms - dims - dims*self.noise_logvar)
         v = 0.5*(K.sum(cvars, axis=1) + norms - float(dims) - K.sum(K.log(cvars), axis=1))
         kl = nats2bits * K.mean(v)
         return kl
@@ -178,9 +176,10 @@ class MICalculator(MIRegularizerBase):
         return kde_entropy(self.noise_layer_input, current_var)
 
     def get_hcond(self, x=None):
-        # returns entropy
+        # returns conditional entropy
         return kde_condentropy(self.noise_layer_input, K.exp(self.noise_logvar))
 
     def get_mi(self, x=None):
-        return self.get_h() - self.get_hcond()
+        mi = self.get_h() - self.get_hcond()
+        return mi
     

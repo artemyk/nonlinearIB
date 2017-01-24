@@ -2,69 +2,61 @@ import numpy as np
 import keras.backend as K
 from keras.callbacks import Callback
 import copy
+from collections import OrderedDict
 
-class ReportVars(Callback):
-    def __init__(self, noiselayer, micalculator, *kargs, **kwargs):
-        super(ReportVars, self).__init__(*kargs, **kwargs)
+class Reporter(Callback):
+    def __init__(self, trn, tst, noiselayer, micalculator, on_epoch_report_mi=False):
+        self.trn = trn
+        self.tst = tst
         self.noiselayer = noiselayer
         self.micalculator = micalculator
+        self.on_epoch_report_mi = on_epoch_report_mi
         
     def on_epoch_end(self, epoch, logs={}):
-        lv1, lv2 = 0., 0.
-        if hasattr(self.micalculator, 'kde_logvar'):
-            lv1 = K.get_value(self.micalculator.kde_logvar)
-        if hasattr(self.noiselayer, 'logvar'):
-            lv2 = K.get_value(self.noiselayer.logvar)
-        logs['kdeLV']   = lv1
-        logs['noiseLV'] = lv2
-        print 'kdeLV=%.5f, noiseLV=%.5f' % (lv1, lv2) 
-
-
-from layers import MICalculator
-def get_logs(model, trn, tst, noiselayer, micalculator, MIEstimateN=None):
-    logs = {}
-
-    inputs = model.inputs + model.targets + model.sample_weights + [ K.learning_phase(),]
-    lossfunc = K.function(inputs, [model.total_loss])
-    logs['kl_trn'] = lossfunc([trn.X, trn.Y, np.ones(len(trn.X)), 0])[0]
-    logs['kl_tst'] = lossfunc([tst.X, tst.Y, np.ones(len(tst.X)), 0])[0]
-
-    if micalculator is not None:
-        if hasattr(micalculator, 'kde_logvar'):
-            lv1 = K.get_value(micalculator.kde_logvar)
-            logs['kdeLV']   = lv1
-            print 'kdeLV=%.5f,' % lv1,
-        
-    if noiselayer is not None and hasattr(noiselayer, 'logvar'):
-        lv2 = K.get_value(noiselayer.logvar)
-        logs['noiseLV'] = lv2
-        print 'noiseLV=%.5f' % lv2
+        l = self.get_logs(calculate_mi=self.on_epoch_report_mi)
+        for k, v in l.iteritems():
+            logs[k]=v
+            print "%s=%s"%(k,v),
+        print
     
-    logs['mi_trn'], logs['mi_tst'] = '-', '-'
-
-    if micalculator is not None:
-        lossfunc = K.function(inputs, [noiselayer.input])
-        noiselayer_inputs = {}
-        noiselayer_inputs['trn']  = lossfunc([trn.X, trn.Y, np.ones(len(trn.X)), 0])[0]
-        noiselayer_inputs['tst']  = lossfunc([tst.X, tst.Y, np.ones(len(tst.X)), 0])[0]
+    def get_logs(self, calculate_mi=False, calculate_kl=False):
+        logs = OrderedDict()
         
-        for k in ['trn','tst']:
-            mi_calc = micalculator
-            if k != 'trn' and hasattr(mi_calc, 'set_data'):
-                mi_calc = copy.copy(mi_calc)
-                mi_calc.set_data(tst.X)
-                                
-            h, hcond = 0., 0.
-            c_in = K.variable(noiselayer_inputs[k])
-            mi = K.function([], [mi_calc.get_mi(c_in)])([])[0]
-            if hasattr(mi_calc, 'get_h'):
-                h     = K.function([], [mi_calc.get_h(c_in)])([])[0]
-            if hasattr(mi_calc, 'get_hcond'):
-                hcond = K.function([], [mi_calc.get_hcond(c_in)])([])[0]
+        if self.noiselayer is not None and hasattr(self.noiselayer, 'logvar'):
+            logs['noiseLV'] = K.get_value(self.noiselayer.logvar)
+
+        inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
+        trn_inputs = [self.trn.X, self.trn.Y, np.ones(len(self.trn.X)), 0]
+        tst_inputs = [self.tst.X, self.tst.Y, np.ones(len(self.tst.X)), 0]
+        
+        if self.micalculator is not None and hasattr(self.micalculator, 'kde_logvar'):
+                logs['kdeLV'] = K.get_value(micalculator.kde_logvar)
                 
-            logs['mi_'+k] = map(float, [mi, h, hcond])
-            
-    print ', mitrn=%s, mitst=%s, kltrn=%.3f, kltst=%.3f' % (logs['mi_trn'], logs['mi_tst'], logs['kl_trn'], logs['kl_tst'])
-        
-    return logs
+        if self.micalculator is not None and calculate_mi:
+            f = K.function(inputs, [self.noiselayer.input])
+            noiselayer_inputs = {}
+            noiselayer_inputs['trn']  = f(trn_inputs)[0]
+            noiselayer_inputs['tst']  = f(tst_inputs)[0]
 
+            for k in ['trn','tst']:
+                mi_calc = self.micalculator
+                if k != 'trn' and hasattr(mi_calc, 'set_data'):
+                    mi_calc = copy.copy(mi_calc)
+                    mi_calc.set_data(self.tst.X)
+
+                h, hcond = 0., 0.
+                c_in = K.variable(noiselayer_inputs[k])
+                mi = K.function([], [mi_calc.get_mi(c_in)])([])[0]
+                #if hasattr(mi_calc, 'get_h'):
+                #    h     = K.function([], [mi_calc.get_h(c_in)])([])[0]
+                #if hasattr(mi_calc, 'get_hcond'):
+                #    hcond = K.function([], [mi_calc.get_hcond(c_in)])([])[0]
+                #logs['mi_'+k] = map(float, [mi, h, hcond])
+                logs['mi_'+k] = float(mi)
+
+        if calculate_kl:
+            lossfunc = K.function(inputs, [self.model.total_loss])
+            logs['kl_trn'] = lossfunc(trn_inputs)[0]
+            logs['kl_tst'] = lossfunc(tst_inputs)[0]
+        
+        return logs
