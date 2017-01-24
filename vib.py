@@ -112,10 +112,12 @@ if __name__ == "__main__":
                                  on_epoch_report_mi=args.epoch_report_mi)
     cbs.append(reporter)
 
+    import keras.optimizers
+    adam = keras.optimizers.Adam(lr=0.0001, beta_1 = 0.5, beta_2=0.999) # exponential weight decay?
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
     try:
-        model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=128, nb_epoch=200, validation_data=(tst.X, tst.Y), callbacks=cbs)
+        model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=100, nb_epoch=200, validation_data=(tst.X, tst.Y), callbacks=cbs)
     except KeyboardInterrupt:
         print "KeyboardInterrupt called"
     
