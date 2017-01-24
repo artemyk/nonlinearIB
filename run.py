@@ -31,6 +31,9 @@ parser.add_argument('--epoch_report_mi', action='store_true', default=False, hel
 
 args = parser.parse_args()
 
+if args.no_test_phase_noise and args.predict_samples > 1:
+    raise Exception('Multiple predictions samples only makes sense if test-phase noise present')
+    
 if args.backend == 'theano':
     import theano
     theano.config.optimizer = 'fast_compile'
