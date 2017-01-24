@@ -8,7 +8,7 @@ from collections import namedtuple
 import training
 import layers
 import reporting
-
+import vib
 
 def get_mnist(trainN=None, testN=None):
     # Initialize MNIST dataset
@@ -81,9 +81,9 @@ def buildmodel(opts, trn):
                                         logvar_trainable=opts['noise_logvar_grad_trainable'],
                                           test_phase_noise=test_phase_noise)
         else:
-            micalculator = layers.MICalculatorVIB(opts['beta'])
-            noiselayer = layers.NoiseLayerVIB(mean_dims=HIDDEN_DIMS[-1]/2, 
-                                              test_phase_noise=test_phase_noise)
+            micalculator = vib.MICalculatorVIB(opts['beta'])
+            noiselayer = vib.NoiseLayerVIB(mean_dims=HIDDEN_DIMS[-1]/2, 
+                                           test_phase_noise=test_phase_noise)
 
         micalculator.set_noiselayer(noiselayer)
 

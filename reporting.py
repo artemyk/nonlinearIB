@@ -19,7 +19,7 @@ class Reporter(Callback):
             print "%s=%s"%(k,v),
         print
     
-    def get_logs(self, calculate_mi=False, calculate_kl=False):
+    def get_logs(self, calculate_mi=False, calculate_loss=False):
         logs = OrderedDict()
         
         if self.noiselayer is not None and hasattr(self.noiselayer, 'logvar'):
@@ -54,9 +54,10 @@ class Reporter(Callback):
                 #logs['mi_'+k] = map(float, [mi, h, hcond])
                 logs['mi_'+k] = float(mi)
 
-        if calculate_kl:
+        if calculate_loss:
+            # Compute cross entropy of predictions
             lossfunc = K.function(inputs, [self.model.total_loss])
-            logs['kl_trn'] = lossfunc(trn_inputs)[0]
-            logs['kl_tst'] = lossfunc(tst_inputs)[0]
+            logs['loss_trn'] = lossfunc(trn_inputs)[0]
+            logs['loss_tst'] = lossfunc(tst_inputs)[0]
         
         return logs

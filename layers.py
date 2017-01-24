@@ -50,63 +50,6 @@ class IdentityMap(Layer):
     def call(self, x, mask=None):
         return x
         
-class NoiseLayerVIB(Layer):
-    # Implementation of Deep Variational Information Bottleneck, Alemi et al.
-    def __init__(self, 
-                 mean_dims,
-                 test_phase_noise = False,
-                 *kargs, **kwargs):
-        self.supports_masking = True
-        self.uses_learning_phase = True
-        
-        self.test_phase_noise = test_phase_noise
-        self.mean_dims = mean_dims
-        
-        super(NoiseLayerVIB, self).__init__(*kargs, **kwargs)
-        
-    def get_noise(self, cvars):
-        return cvars * K.random_normal(shape=K.shape(cvars), mean=0., std=1)
-    
-    def get_output_shape_for(self, input_shape):
-        return (input_shape[0], self.mean_dims)
-    
-    def get_means_vars(self, x):
-        means, rawsigmas = x[:,:self.mean_dims], x[:,self.mean_dims:]
-        sigmas = K.log(1+K.exp(rawsigmas - 5.))
-        cvars = K.square(sigmas)
-        return means, cvars
-    
-    def call(self, x, mask=None):
-        means, cvars = self.get_means_vars(x)
-        with_noise = means + self.get_noise(cvars)
-        if self.test_phase_noise:
-            return with_noise
-        else:
-            return K.in_train_phase(with_noise, means) 
-
-class MIRegularizerBase(regularizers.Regularizer):
-    def __call__(self, x):
-        return K.in_train_phase(self.beta * self.get_mi(x), K.variable(0.0))
-
-class MICalculatorVIB(MIRegularizerBase):
-    # Implementation of Deep Variational Information Bottleneck, Alemi et al.
-    def __init__(self, beta):
-        self.beta = beta
-        super(MICalculatorVIB, self).__init__()
-        
-    def set_noiselayer(self, noiselayer):
-        self.noiselayer = noiselayer
-        
-    def get_mi(self, x):
-        # KL(N(u,Sigma) || N(0,1)) = 0.5 * [tr(Sigma) + ||u||^2 - k - ln ( |Sigma 0| )]
-        dims = self.noiselayer.mean_dims
-        means, cvars = self.noiselayer.get_means_vars(x)
-        norms = K.square(means)
-        norms = K.sum(norms, axis=1)
-        v = 0.5*(K.sum(cvars, axis=1) + norms - float(dims) - K.sum(K.log(cvars), axis=1))
-        kl = nats2bits * K.mean(v)
-        return kl
-        
 
 if K._BACKEND == 'tensorflow':
     def K_n_choose_k(n, k, seed=None):
@@ -127,7 +70,7 @@ else:
         r = rng.choice(size=(k,), a=n, replace=False, dtype='int32')
         return r
     
-class MICalculator(MIRegularizerBase):
+class MICalculator(regularizers.Regularizer):
     def __init__(self, beta, model_layers, data, miN, init_kde_logvar=-5.):
         self.beta            = beta
         self.init_kde_logvar = init_kde_logvar
@@ -183,3 +126,5 @@ class MICalculator(MIRegularizerBase):
         mi = self.get_h() - self.get_hcond()
         return mi
     
+    def __call__(self, x):
+        return K.in_train_phase(self.beta * self.get_mi(x), K.variable(0.0))

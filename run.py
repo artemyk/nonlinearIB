@@ -61,6 +61,7 @@ print '# ARGS:', arg_dict
 
 model, cbs, noiselayer, micalculator = buildmodel.buildmodel(arg_dict, trn=trn)
 
+# Reports MI and Cross Entropy Values
 reporter = reporting.Reporter(trn=trn, tst=tst, noiselayer=noiselayer, micalculator=micalculator,
                              on_epoch_report_mi=args.epoch_report_mi)
 cbs.append(reporter)
@@ -68,7 +69,7 @@ cbs.append(reporter)
 
 def lrscheduler(epoch):
     lr = 0.001 * args.lr_decay**np.floor(epoch / args.lr_decaysteps)
-    lr = max(lr, 1e-5)
+    #lr = max(lr, 1e-5)
     print 'Learning rate: %.7f' % lr
     return lr
 cbs.append(keras.callbacks.LearningRateScheduler(lrscheduler))
@@ -102,8 +103,8 @@ preds = probs.argmax(axis=-1)
 print 'Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(preds == tst.y))
 
 print '# ENDARGS:', arg_dict
+logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
 print '# ENDRESULTS:',
-logs = reporter.get_logs(calculate_mi=True, calculate_kl=True)
 for k, v in logs.iteritems():
     print "%s=%s"%(k,v),
 print
