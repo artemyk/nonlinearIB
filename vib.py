@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser(description='Run Variational IB', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--beta' , type=float, default=0.0, help='beta hyperparameter value')
+    parser.add_argument('beta' , type=float, default=0.0, help='beta hyperparameter value')
     parser.add_argument('--epoch_report_mi', action='store_true', default=False, help='Report MI values every epoch?')
     args = parser.parse_args()
     print "Running variational IB with beta=%.5f" % args.beta
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     cbs = []
     
     def lrscheduler(epoch):
-        lr = 0.001 * 0.97**np.floor(epoch / 2)
+        lr = 0.0001 * 0.97**np.floor(epoch / 2)
         print 'Learning rate: %.7f' % lr
         return lr
     cbs.append(keras.callbacks.LearningRateScheduler(lrscheduler))
