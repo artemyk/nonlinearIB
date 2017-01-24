@@ -99,7 +99,8 @@ if __name__ == "__main__":
     model = Model(input=inputs, output=predictions)
     
     # Set up callbacks
-    cbs = []
+    from exp_moving_avg import ExponentialMovingAverage
+    cbs = [ExponentialMovingAverage(save_mv_ave_model=False)]
     
     def lrscheduler(epoch):
         lr = 0.0001 * 0.97**np.floor(epoch / 2)
