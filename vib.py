@@ -50,7 +50,7 @@ class MICalculatorVIB(regularizers.Regularizer):
         
     def get_mi(self, x):
         # Compute average KL: 
-        #   KL(N(u,Sigma) || N(0,1)) = 0.5 * [tr(Sigma) + ||u||^2 - k - ln ( |Sigma 0| )]
+        #   KL(N(u,Cov) || N(0,1)) = 0.5 * [tr(Cov) + ||u||^2 - k - ln ( |Cov| )]
         k = self.noiselayer.mean_dims
         means, sigmas = self.noiselayer.get_means_sigmas(x)
         cvars = K.square(sigmas)
