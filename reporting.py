@@ -30,7 +30,7 @@ class Reporter(Callback):
         tst_inputs = [self.tst.X, self.tst.Y, np.ones(len(self.tst.X)), 0]
         
         if self.micalculator is not None and hasattr(self.micalculator, 'kde_logvar'):
-                logs['kdeLV'] = K.get_value(micalculator.kde_logvar)
+                logs['kdeLV'] = K.get_value(self.micalculator.kde_logvar)
                 
         if self.micalculator is not None and calculate_mi:
             f = K.function(inputs, [self.noiselayer.input])
