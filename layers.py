@@ -67,16 +67,20 @@ class NoiseLayerVIB(Layer):
         
         super(NoiseLayerVIB, self).__init__(*kargs, **kwargs)
         
-    def get_noise(self, clogvars):
-        cvars = K.exp(0.5*clogvars)
-        return cvars * K.random_normal(shape=K.shape(clogvars), mean=0., std=1)
+    def get_noise(self, cvars):
+        return cvars * K.random_normal(shape=K.shape(cvars), mean=0., std=1)
     
     def get_output_shape_for(self, input_shape):
         return (input_shape[0], self.mean_dims)
     
+    def get_means_vars(self, x):
+        means, rawvars = x[:,:self.mean_dims], x[:,self.mean_dims:]
+        cvars = K.log(1+K.exp(rawvars - 5.))
+        return means, cvars
+    
     def call(self, x, mask=None):
-        means, clogvars = x[:,:self.mean_dims], x[:,self.mean_dims:]
-        with_noise = means + self.get_noise(clogvars)
+        means, cvars = self.get_means_vars(x)
+        with_noise = means + self.get_noise(cvars)
         if self.test_phase_noise:
             return with_noise
         else:
@@ -97,46 +101,77 @@ class MICalculatorVIB(MIRegularizerBase):
     def get_mi(self, x):
         # 0.5 * [tr(Sigma) + ||u_1||^2 - k - ln ( |Sigma 0| )]
         dims = self.noiselayer.mean_dims
-        means, logcovs = x[:,:dims], x[:,dims:]
+        means, cvars = self.noiselayer.get_means_vars(x)
         norms = K.square(means)
         norms = K.sum(norms, axis=1)
         #v = 0.5 * (dims * K.exp(self.noise_logvar) + norms - dims - dims*self.noise_logvar)
-        v = 0.5*(K.sum(K.exp(logcovs), axis=1) + norms - float(dims) - K.sum(logcovs, axis=1))
+        v = 0.5*(K.sum(cvars, axis=1) + norms - float(dims) - K.sum(K.log(cvars), axis=1))
         kl = nats2bits * K.mean(v)
         return kl
         
+
+if K._BACKEND == 'tensorflow':
+    def K_n_choose_k(n, k, seed=None):
+        import tensorflow as tf
+        if seed is None:
+            seed = np.random.randint(10e6)
+        x = tf.range(0, limit=n, dtype='int32')
+        x = tf.random_shuffle(x, seed=seed)
+        x = x[0:k]
+        return x
+    
+else:
+    def K_n_choose_k(n, k, seed=None):
+        from theano.tensor.shared_randomstreams import RandomStreams
+        if seed is None:
+            seed = np.random.randint(1, 10e6)
+        rng = RandomStreams(seed=seed)
+        r = rng.choice(size=(k,), a=n, replace=False, dtype='int32')
+        return r
     
 class MICalculator(MIRegularizerBase):
-    def __init__(self, beta, model_layers, input_samples, init_kde_logvar=-5.):
+    def __init__(self, beta, model_layers, data, miN, init_kde_logvar=-5.):
         self.beta            = beta
         self.init_kde_logvar = init_kde_logvar
         self.model_layers    = model_layers
-
-        self.kde_logvar = K.variable(self.init_kde_logvar)
+        self.miN  = miN
+        self.set_data(data)
         
-        self.set_input_samples(input_samples)
+        # this should be constructed *before* NoiseLayer is added
+        for layer in self.model_layers:
+            if isinstance(layer, NoiseLayer):
+                raise Exception("Model should not have NoiseLayer")
+        
+        self.kde_logvar = K.variable(self.init_kde_logvar)
         
         super(MICalculator, self).__init__()
 
-    def set_input_samples(self, input_samples):
-        self.input_samples = input_samples
-        if K._BACKEND == 'tensorflow':
-            import tensorflow as tf
-            noise_layer_input = tf.constant(input_samples) 
-        else:
-            noise_layer_input = K.variable(input_samples)
-
-        for layerndx, layer in enumerate(self.model_layers):
-            if isinstance(layer, NoiseLayer):
-                # this should be constructed *before* NoiseLayer is added
-                raise Exception("Model should not have NoiseLayer")
-            noise_layer_input = layer(noise_layer_input)
-        self.noise_layer_input = noise_layer_input
+    def set_data(self, data):
+        self.data = data
+        self._noise_layer_input = None
         
-
     def set_noiselayer(self, noiselayer):
         self.noise_logvar = noiselayer.logvar
-        
+                
+    @property
+    def noise_layer_input(self):
+        if self._noise_layer_input is None:
+            if self.data is None:
+                raise Exception("data attribute not initialized")
+            if K._BACKEND == 'tensorflow':
+                import tensorflow as tf
+                c_input = tf.constant(self.data) 
+            else:
+                c_input = K.variable(self.data)
+            input_ndxs = K_n_choose_k(len(self.data), self.miN)
+            noise_layer_input = K.gather(c_input, input_ndxs)
+
+            for layerndx, layer in enumerate(self.model_layers):
+                noise_layer_input = layer.call(noise_layer_input)
+            self._noise_layer_input = noise_layer_input
+                    
+        return self._noise_layer_input
+
     def get_h(self, x=None):
         # returns entropy
         current_var = K.exp(self.noise_logvar) + K.exp(self.kde_logvar)

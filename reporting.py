@@ -45,17 +45,14 @@ def get_logs(model, trn, tst, noiselayer, micalculator, MIEstimateN=None):
     if micalculator is not None:
         lossfunc = K.function(inputs, [noiselayer.input])
         noiselayer_inputs = {}
-        noiselayer_inputs['trn'] = lossfunc([trn.X, trn.Y, np.ones(len(trn.X)), 0])[0]
-        noiselayer_inputs['tst'] = lossfunc([tst.X, tst.Y, np.ones(len(tst.X)), 0])[0]
+        noiselayer_inputs['trn']  = lossfunc([trn.X, trn.Y, np.ones(len(trn.X)), 0])[0]
+        noiselayer_inputs['tst']  = lossfunc([tst.X, tst.Y, np.ones(len(tst.X)), 0])[0]
         
         for k in ['trn','tst']:
             mi_calc = micalculator
-            if hasattr(mi_calc, 'set_input_samples'):
+            if k != 'trn' and hasattr(mi_calc, 'set_data'):
                 mi_calc = copy.copy(mi_calc)
-                mi_samples = trn.X if k=='trn' else tst.X
-                if MIEstimateN is not None:
-                    mi_samples = mi_samples[np.random.choice(mi_samples.shape[0], MIEstimateN), :]
-                mi_calc.set_input_samples(mi_samples)
+                mi_calc.set_data(tst.X)
                                 
             h, hcond = 0., 0.
             c_in = K.variable(noiselayer_inputs[k])
