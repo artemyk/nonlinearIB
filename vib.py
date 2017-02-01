@@ -5,7 +5,6 @@ import numpy as np
 from keras.layers import Layer
 from keras import regularizers
 
-nats2bits = np.array(1.0/np.log(2), dtype='float32')
 
 
 class NoiseLayerVIB(Layer):
@@ -57,7 +56,7 @@ class MICalculatorVIB(regularizers.Regularizer):
         norms = K.square(means)
         norms = K.sum(norms, axis=1)
         v = 0.5*(K.sum(cvars, axis=1) + norms - float(k) - K.sum(K.log(cvars), axis=1))
-        kl = nats2bits * K.mean(v)
+        kl = K.mean(v)
         return kl
         
     def __call__(self, x):

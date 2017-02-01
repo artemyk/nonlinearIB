@@ -2,7 +2,10 @@ import numpy as np
 import scipy
 import keras.backend as K
 
-nats2bits = np.array(1.0/np.log(2), dtype='float32')
+def np_entropy(p):
+    cp = np.log(p)
+    cp[np.isclose(p,0.)]=0.
+    return -p.dot(cp)
 
 def logsumexp(mx, axis):
     cmax = K.max(mx, axis=axis)
@@ -11,7 +14,7 @@ def logsumexp(mx, axis):
     return cmax + K.log(K.sum(K.exp(mx2), axis=1))
 
 def kde_entropy(output, var):
-    # Kernel density estimate of entropy
+    # Kernel density estimate of entropy, in nats
 
     dims = K.cast(K.shape(output)[1], K.floatx() ) 
     N    = K.cast(K.shape(output)[0], K.floatx() )
@@ -26,14 +29,14 @@ def kde_entropy(output, var):
     lprobs = logsumexp(-dists, axis=1) - K.log(N) - normconst
     h = -K.mean(lprobs)
     
-    return nats2bits * h
+    return h
 
 def kde_condentropy(output, var):
-    # Return entropy of a multivariate Gaussian
+    # Return entropy of a multivariate Gaussian, in nats
 
     dims = K.cast(K.shape(output)[1], K.floatx() )
     normconst = (dims/2.0)*K.log(2*np.pi*var)
-    return nats2bits * normconst
+    return normconst
 
 def kde_entropy_from_dists_loo(dists, N, dims, var):
     # Given a distance matrix dists, return leave-one-out kernel density estimate of entropy
@@ -42,5 +45,5 @@ def kde_entropy_from_dists_loo(dists, N, dims, var):
     normconst = (dims/2.0)*K.log(2*np.pi*var)
     lprobs = logsumexp(-dists2, axis=1) - np.log(N-1) - normconst
     h = -K.mean(lprobs)
-    return nats2bits * h
+    return h
 

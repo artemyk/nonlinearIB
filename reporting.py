@@ -3,6 +3,10 @@ import keras.backend as K
 from keras.callbacks import Callback
 import copy
 from collections import OrderedDict
+from entropy import np_entropy
+
+#nats2bits = np.array(1.0/np.log(2), dtype='float32')
+
 
 class Reporter(Callback):
     def __init__(self, trn, tst, noiselayer, micalculator, on_epoch_report_mi=False):
@@ -55,9 +59,13 @@ class Reporter(Callback):
                 logs['mi_'+k] = float(mi)
 
         if calculate_loss:
+            h_trn = np_entropy(self.trn.Y.mean(axis=0))
+            h_tst = np_entropy(self.tst.Y.mean(axis=0))
             # Compute cross entropy of predictions
             lossfunc = K.function(inputs, [self.model.total_loss])
             logs['loss_trn'] = lossfunc(trn_inputs)[0]
             logs['loss_tst'] = lossfunc(tst_inputs)[0]
+            logs['loss_mi_trn'] = h_trn - logs['loss_trn']
+            logs['loss_mi_tst'] = h_tst - logs['loss_tst']
         
         return logs

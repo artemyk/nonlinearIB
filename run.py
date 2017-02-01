@@ -7,10 +7,11 @@ parser = argparse.ArgumentParser(description='Run nonlinear IB on MNIST dataset'
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--backend', default='theano', choices=['tensorflow','theano'],
                     help='Deep learning backend to use')
-parser.add_argument('--mode', choices=['regular','dropout','vIB','nlIB'], default='nlIB',
+parser.add_argument('--mode', choices=['regular','dropout','vIB','nlIB', 'nlIBnokde'], default='nlIB',
     help='Regularization mode')
 parser.add_argument('--nb_epoch', type=int, default=60, help='Number of epochs')
 parser.add_argument('--beta' , type=float, default=0.0, help='beta hyperparameter value')
+parser.add_argument('--init_kde_logvar', type=float, default=-5., help='Initialize log variance of KDE estimator')
 parser.add_argument('--init_noise_logvar', type=float, default=-6., help='Initialize log variance of noise')
 #parser.add_argument('--maxnorm', type=float, help='Max-norm constraint to impose')
 parser.add_argument('--trainN', type=int, help='Number of training data samples')

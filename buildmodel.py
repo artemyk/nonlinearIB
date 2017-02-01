@@ -70,14 +70,16 @@ def buildmodel(opts, trn):
 
         model_layers.append( Dense(hdim, **layer_args) )
 
-    if opts['mode'] in ['nlIB', 'vIB']:
+    if opts['mode'] in ['nlIB', 'nlIBnokde', 'vIB']:
         test_phase_noise = not opts['no_test_phase_noise']
-        if opts['mode'] == 'nlIB':
+        if opts['mode'] == 'nlIB' or opts['mode'] == 'nlIBnokde':
             micalculator = layers.MICalculator(opts['beta'], 
-                                               model_layers, data=trn.X, 
+                                               model_layers, 
+                                               data=trn.X, 
                                                miN=opts['miN'], 
-                                               init_kde_logvar=-5.)
-            cbs.append(training.KDETrain(mi_calculator=micalculator))
+                                               init_kde_logvar=opts['init_kde_logvar'])
+            if opts['mode'] != 'nlIBnokde':
+                cbs.append(training.KDETrain(mi_calculator=micalculator))
             noiselayer = layers.NoiseLayer(init_logvar = opts['init_noise_logvar'], 
                                         logvar_trainable=opts['noise_logvar_grad_trainable'],
                                           test_phase_noise=test_phase_noise)
