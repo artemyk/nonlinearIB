@@ -98,9 +98,8 @@ if __name__ == "__main__":
     model = Model(input=inputs, output=predictions)
     
     # Set up callbacks
-    from exp_moving_avg import ExponentialMovingAverage
-    cbs = [ExponentialMovingAverage(save_mv_ave_model=False)]
-    
+    cbs = []
+ 
     def lrscheduler(epoch):
         lr = 0.0001 * 0.97**np.floor(epoch / 2)
         print 'Learning rate: %.7f' % lr
