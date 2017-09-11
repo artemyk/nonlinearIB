@@ -20,6 +20,7 @@ parser.add_argument('--miN', type=int, default=1000, help='Number of training da
 parser.add_argument('--batch_size', type=int, default=128, help='Mini-batch size')
 parser.add_argument('--optimizer', choices=['sgd','rmsprop','adagrad','adam'], default='adam',
                     help='Which optimizer to use')
+parser.add_argument('--init_lr', type=float, default=0.001, help='Initial learning rate')
 parser.add_argument('--lr_decaysteps', type=int, default=10, help='Number of iterations before dropping learning rate')
 parser.add_argument('--lr_decay', type=float, default=0.5, help='Learning rate decay rate (applied every lr_decaysteps)')
 parser.add_argument('--no_test_phase_noise', action='store_true', default=False, help='Disable noise during testing phase')
@@ -29,6 +30,8 @@ parser.add_argument('--encoder_acts', type=str, default='relu-relu', help='Encod
 parser.add_argument('--decoder', type=str, default='', help='Decoder network architecture')
 parser.add_argument('--predict_samples', type=int, default=1, help='No. of samples to measure accuracy at end of run')
 parser.add_argument('--epoch_report_mi', action='store_true', default=False, help='Report MI values every epoch?')
+parser.add_argument('--noise_logvar_nottrainable', action='store_true', default=False, help='Dont train noise variance')
+parser.add_argument('--same_minibatch', action='store_true', default=False, help='Use same mini-batch for optimizing prediction error and for MI')
 
 args = parser.parse_args()
 
@@ -52,7 +55,7 @@ import keras.callbacks
 arg_dict = vars(args)
 
 VALIDATE_ON_TEST = True
-arg_dict['noise_logvar_grad_trainable'] = True
+#arg_dict['noise_logvar_trainable'] = True
 
 trn, tst = buildmodel.get_mnist(args.trainN, args.testN)
 # ***************************
@@ -69,7 +72,7 @@ cbs.append(reporter)
 
 
 def lrscheduler(epoch):
-    lr = 0.001 * args.lr_decay**np.floor(epoch / args.lr_decaysteps)
+    lr = args.init_lr * args.lr_decay**np.floor(epoch / args.lr_decaysteps)
     #lr = max(lr, 1e-5)
     print 'Learning rate: %.7f' % lr
     return lr

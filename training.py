@@ -79,7 +79,7 @@ class KDETrain(Callback):
         return dists
     
     def on_epoch_begin(self, epoch, logs={}):
-        vals = K.eval(self.mi_calculator.noise_layer_input)
+        vals = K.eval(self.mi_calculator.sample_noise_layer_input)
         dists = self.get_dists(vals)
         dists += 10e20 * np.eye(dists.shape[0])
         r = scipy.optimize.minimize(self.obj, K.get_value(self.mi_calculator.kde_logvar).flat[0], 
