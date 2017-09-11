@@ -80,8 +80,9 @@ def buildmodel(opts, trn):
                                                init_kde_logvar=opts['init_kde_logvar'])
             if opts['mode'] != 'nlIBnokde':
                 cbs.append(training.KDETrain(mi_calculator=micalculator))
+            noise_trainable = not opts.get('noise_logvar_nottrainable', False)  
             noiselayer = layers.NoiseLayer(init_logvar = opts['init_noise_logvar'], 
-                                        logvar_trainable=opts['noise_logvar_grad_trainable'],
+                                          logvar_trainable=noise_trainable,
                                           test_phase_noise=test_phase_noise)
         else:
             micalculator = vib.MICalculatorVIB(opts['beta'])

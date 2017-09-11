@@ -4,17 +4,16 @@ import numpy as np
 
 trn, tst = buildmodel.get_mnist()
 
-def get_noiselayer_activations(arg_dict, fsfx, inputX, batch_size=1000):
+def get_noiselayer_activations(arg_dict, fsfx, inputX, batch_size=1000, basedir='models'):
     arg_dict['no_test_phase_noise']=True
     if 'init_kde_logvar' not in arg_dict:
         arg_dict['init_kde_logvar'] = -5.
     model, _, noiselayer, _ = buildmodel.buildmodel(arg_dict, trn)
 
-    model.load_weights("models/fitmodel-%s.h5"%fsfx)
+    model.load_weights(basedir+"/fitmodel-%s.h5"%fsfx)
     
     if noiselayer is None:
-        print len(model.layers)
-        noiselayer = model.layers[-2]
+        noiselayer = model.layers[-len(arg_dict['decoder'].split("-"))]
     get_activations = K.function([model.layers[0].input, K.learning_phase()], [noiselayer.input,])
     #pltX, pltY = trn.X[0:10000], trn.y[0:10000]
     cacts = []

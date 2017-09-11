@@ -71,13 +71,16 @@ else:
         return r
     
 class MICalculator(regularizers.Regularizer):
-    def __init__(self, beta, model_layers, data, miN, init_kde_logvar=-5.):
+    def __init__(self, beta, model_layers, same_batch=False, data=None, miN=None, init_kde_logvar=-5.):
         self.beta            = beta
         self.init_kde_logvar = init_kde_logvar
         self.model_layers    = model_layers
+        
+        self.same_batch = same_batch
+        
         self.miN  = miN
         self.set_data(data)
-        
+            
         # this should be constructed *before* NoiseLayer is added
         for layer in self.model_layers:
             if isinstance(layer, NoiseLayer):
@@ -89,14 +92,14 @@ class MICalculator(regularizers.Regularizer):
 
     def set_data(self, data):
         self.data = data
-        self._noise_layer_input = None
+        self._sample_noise_layer_input = None
         
     def set_noiselayer(self, noiselayer):
         self.noise_logvar = noiselayer.logvar
-                
+          
     @property
-    def noise_layer_input(self):
-        if self._noise_layer_input is None:
+    def sample_noise_layer_input(self):
+        if self._sample_noise_layer_input is None:
             if self.data is None:
                 raise Exception("data attribute not initialized")
             if K._BACKEND == 'tensorflow':
@@ -109,21 +112,27 @@ class MICalculator(regularizers.Regularizer):
 
             for layerndx, layer in enumerate(self.model_layers):
                 noise_layer_input = layer.call(noise_layer_input)
-            self._noise_layer_input = noise_layer_input
+            self._sample_noise_layer_input = noise_layer_input
                     
-        return self._noise_layer_input
+        return self._sample_noise_layer_input
+    
+    def noise_layer_input(self, x):
+        if self.same_batch:
+            return x
+        else:
+            return self.sample_noise_layer_input
 
     def get_h(self, x=None):
         # returns entropy
         current_var = K.exp(self.noise_logvar) + K.exp(self.kde_logvar)
-        return kde_entropy(self.noise_layer_input, current_var)
+        return kde_entropy(self.noise_layer_input(x), current_var)
 
     def get_hcond(self, x=None):
         # returns conditional entropy
-        return kde_condentropy(self.noise_layer_input, K.exp(self.noise_logvar))
+        return kde_condentropy(self.noise_layer_input(x), K.exp(self.noise_logvar))
 
     def get_mi(self, x=None):
-        mi = self.get_h() - self.get_hcond()
+        mi = self.get_h(x) - self.get_hcond(x)
         return mi
     
     def __call__(self, x):
