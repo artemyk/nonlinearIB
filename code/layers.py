@@ -33,7 +33,7 @@ class NoiseLayer(Layer):
             self.trainable_weights = []
         
     def get_noise(self, x):
-        return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x), mean=0., std=1)
+        return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x), mean=0., stddev=1)
     
     def call(self, x, mask=None):
         if self.test_phase_noise:
@@ -75,7 +75,7 @@ class MICalculator(regularizers.Regularizer):
         self.beta            = beta
         self.init_kde_logvar = init_kde_logvar
         self.model_layers    = model_layers
-        
+        print(model_layers) 
         self.same_batch = same_batch
         
         self.miN  = miN

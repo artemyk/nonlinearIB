@@ -42,7 +42,6 @@ def get_mnist(trainN=None, testN=None):
 def buildmodel(opts, trn):
     noiselayer   = None
     micalculator = None
-    
     # Build model
     inputs = Input(shape=(opts['INPUT_DIM'],))
     model_layers = []
@@ -70,6 +69,7 @@ def buildmodel(opts, trn):
 
         model_layers.append( Dense(hdim, **layer_args) )
 
+    #model_layers.append(Dense(2))
     if opts['mode'] in ['nlIB', 'nlIBnokde', 'vIB']:
         test_phase_noise = not opts['no_test_phase_noise']
         if opts['mode'] == 'nlIB' or opts['mode'] == 'nlIBnokde':
@@ -121,5 +121,4 @@ def buildmodel(opts, trn):
 
     predictions = Dense(trn.nb_classes, init='glorot_uniform', activation='softmax')(cur_layer)
     model = Model(input=inputs, output=predictions)
-    
     return model, cbs, noiselayer, micalculator

@@ -21,7 +21,7 @@ class NoiseLayerVIB(Layer):
         super(NoiseLayerVIB, self).__init__(*kargs, **kwargs)
         
     def get_noise(self, sigmas):
-        return sigmas * K.random_normal(shape=K.shape(sigmas), mean=0., std=1)
+        return sigmas * K.random_normal(shape=K.shape(sigmas), mean=0., stddev=1)
     
     def get_output_shape_for(self, input_shape):
         return (input_shape[0], self.mean_dims)
