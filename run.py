@@ -127,7 +127,7 @@ model.save_weights(fname)
 
 savedhistfname="models/savedhist-%s.dat"%sfx
 with open(savedhistfname, 'wb') as f:
-    cPickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
+    pickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
     print('updated', savedhistfname)
 
 
