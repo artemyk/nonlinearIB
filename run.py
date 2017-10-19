@@ -1,4 +1,4 @@
-# Requires: Keras-2, tensorflow-0.12.1 or theano 0.8.2
+# Requires: Keras-2, tensorflow-0.13 or theano 0.8.2
 from __future__ import print_function
 
 import argparse, os, logging
