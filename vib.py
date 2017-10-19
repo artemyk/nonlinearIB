@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
     print('# ENDRESULTS: ',sep="")
-    for k, v in logs.iteritems():
+    for k, v in logs.items():
         print("%s=%s "%(k,v), sep="")
     print()
 
