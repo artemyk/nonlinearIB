@@ -21,7 +21,7 @@ parser.add_argument('--mode', choices=['regular','dropout','vIB','nlIB', 'nlIBno
     help='Regularization mode')
 parser.add_argument('--log_dir', default='../logs/', help='folder to output log')
 parser.add_argument('--nb_epoch', type=int, default=60, help='Number of epochs')
-parser.add_argument('--beta' , type=float, default=0.2, help='beta hyperparameter value')
+parser.add_argument('--beta' , type=float, default=0.0, help='beta hyperparameter value')
 parser.add_argument('--init_kde_logvar', type=float, default=-5., help='Initialize log variance of KDE estimator')
 parser.add_argument('--init_noise_logvar', type=float, default=-6., help='Initialize log variance of noise')
 #parser.add_argument('--maxnorm', type=float, help='Max-norm constraint to impose')
@@ -36,7 +36,7 @@ parser.add_argument('--lr_decaysteps', type=int, default=10, help='Number of ite
 parser.add_argument('--lr_decay', type=float, default=0.5, help='Learning rate decay rate (applied every lr_decaysteps)')
 parser.add_argument('--no_test_phase_noise', action='store_true', default=False, help='Disable noise during testing phase')
 
-parser.add_argument('--encoder', type=str, default='800-800-2', help='Encoder network architecture')
+parser.add_argument('--encoder', type=str, default='800-800-20', help='Encoder network architecture')
 parser.add_argument('--encoder_acts', type=str, default='relu-relu-relu', help='Encoder layer activations')
 parser.add_argument('--decoder', type=str, default='', help='Decoder network architecture')
 parser.add_argument('--predict_samples', type=int, default=1, help='No. of samples to measure accuracy at end of run')
@@ -63,9 +63,9 @@ else:
 logging.getLogger('keras').setLevel(logging.INFO)
 
 if args.mode == 'nlIB':
-    suffix = '{}_beta{:1.1f}'.format(args.mode,args.beta)
+    suffix = '{}_encoder{}_beta{:1.1f}'.format(args.mode,args.encoder,args.beta)
 else:
-    suffix = '{}'.format(args.mode)
+    suffix = '{}_encoder{}'.format(args.mode,args.encoder)
 
 LOG_DIR = args.log_dir
 if not os.path.isdir(LOG_DIR):
