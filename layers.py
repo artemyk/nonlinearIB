@@ -33,7 +33,7 @@ class NoiseLayer(Layer):
             self.trainable_weights = []
         
     def get_noise(self, x):
-        return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x), mean=0., std=1)
+        return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x))
     
     def call(self, x, mask=None):
         if self.test_phase_noise:
