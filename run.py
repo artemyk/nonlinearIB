@@ -1,7 +1,13 @@
-# Requires: Keras-1.2.1, tensorflow-0.12.1 or theano 0.8.2
+# Requires: Keras-2, tensorflow-0.12.1 or theano 0.8.2
+from __future__ import print_function
 
-import argparse, os, cPickle, logging
+import argparse, os, logging
 import numpy as np
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 parser = argparse.ArgumentParser(description='Run nonlinear IB on MNIST dataset',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -61,7 +67,7 @@ trn, tst = buildmodel.get_mnist(args.trainN, args.testN)
 # ***************************
 
 arg_dict['INPUT_DIM'] = trn.X.shape[1]
-print '# ARGS:', arg_dict
+print('# ARGS:', arg_dict)
 
 model, cbs, noiselayer, micalculator = buildmodel.buildmodel(arg_dict, trn=trn)
 
@@ -74,7 +80,7 @@ cbs.append(reporter)
 def lrscheduler(epoch):
     lr = args.init_lr * args.lr_decay**np.floor(epoch / args.lr_decaysteps)
     #lr = max(lr, 1e-5)
-    print 'Learning rate: %.7f' % lr
+    print('Learning rate: %.7f' % lr)
     return lr
 cbs.append(keras.callbacks.LearningRateScheduler(lrscheduler))
 
@@ -83,7 +89,7 @@ fit_args = dict(
     y          = trn.Y,
     verbose    = 2,
     batch_size = args.batch_size,
-    nb_epoch   = args.nb_epoch,
+    epochs     = args.nb_epoch,
     validation_data  = (tst.X, tst.Y),
     callbacks  = cbs,
 )
@@ -95,7 +101,7 @@ try:
     r = model.fit(**fit_args)
     hist = r.history
 except KeyboardInterrupt:
-    print "KeyboardInterrupt called"
+    print("KeyboardInterrupt called")
     
 
 # Print and save results
@@ -104,25 +110,25 @@ for _ in range(args.predict_samples):
     probs += model.predict(tst.X)
 probs /= float(args.predict_samples)
 preds = probs.argmax(axis=-1)
-print 'Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(preds == tst.y))
+print('Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(preds == tst.y)))
 
-print '# ENDARGS:', arg_dict
+print('# ENDARGS:', arg_dict)
 logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
-print '# ENDRESULTS:',
+print('# ENDRESULTS: ', sep="")
 for k, v in logs.iteritems():
-    print "%s=%s"%(k,v),
-print
+    print("%s=%s "%(k,v), sep="")
+print()
 
 
 sfx = '%s-%s-%s-%f' % (args.mode, args.encoder, args.decoder, args.beta)
 fname = "models/fitmodel-%s.h5"%sfx
-print "saving to %s"%fname
+print("saving to %s"%fname)
 model.save_weights(fname)
 
 savedhistfname="models/savedhist-%s.dat"%sfx
 with open(savedhistfname, 'wb') as f:
     cPickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
-    print 'updated', savedhistfname
+    print('updated', savedhistfname)
 
 
 

@@ -1,4 +1,5 @@
 # Implementation of Deep Variational Information Bottleneck, Alemi et al.
+from __future__ import print_function
 
 import keras.backend as K
 import numpy as np
@@ -21,7 +22,7 @@ class NoiseLayerVIB(Layer):
         super(NoiseLayerVIB, self).__init__(*kargs, **kwargs)
         
     def get_noise(self, sigmas):
-        return sigmas * K.random_normal(shape=K.shape(sigmas), mean=0., std=1)
+        return sigmas * K.random_normal(shape=K.shape(sigmas))
     
     def get_output_shape_for(self, input_shape):
         return (input_shape[0], self.mean_dims)
@@ -78,7 +79,7 @@ if __name__ == "__main__":
     parser.add_argument('beta' , type=float, default=0.0, help='beta hyperparameter value')
     parser.add_argument('--epoch_report_mi', action='store_true', default=False, help='Report MI values every epoch?')
     args = parser.parse_args()
-    print "Running variational IB with beta=%.5f" % args.beta
+    print("Running variational IB with beta=%.5f" % args.beta)
     
     from buildmodel import get_mnist
     trn, tst = get_mnist()
@@ -89,9 +90,9 @@ if __name__ == "__main__":
     micalculator.set_noiselayer(noiselayer)
     
     inputs = Input(shape=(784,))
-    c_layer = Dense(1024, init='he_uniform', activation='relu')(inputs)
-    c_layer = Dense(1024, init='he_uniform', activation='relu')(c_layer)
-    c_layer = Dense(512 , init='he_uniform', activation='linear', activity_regularizer=micalculator)(c_layer)
+    c_layer = Dense(1024, kernel_initializer='he_uniform', activation='relu')(inputs)
+    c_layer = Dense(1024, kernel_initializer='he_uniform', activation='relu')(c_layer)
+    c_layer = Dense(512 , kernel_initializer='he_uniform', activation='linear', activity_regularizer=micalculator)(c_layer)
     
     c_layer = noiselayer(c_layer)
     predictions = Dense(trn.nb_classes, init='he_uniform', activation='softmax')(c_layer)
@@ -102,7 +103,7 @@ if __name__ == "__main__":
  
     def lrscheduler(epoch):
         lr = 0.0001 * 0.97**np.floor(epoch / 2)
-        print 'Learning rate: %.7f' % lr
+        print('Learning rate: %.7f' % lr)
         return lr
     cbs.append(keras.callbacks.LearningRateScheduler(lrscheduler))
     
@@ -116,9 +117,9 @@ if __name__ == "__main__":
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
     try:
-        model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=100, nb_epoch=200, validation_data=(tst.X, tst.Y), callbacks=cbs)
+        model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=100, epochs=200, validation_data=(tst.X, tst.Y), callbacks=cbs)
     except KeyboardInterrupt:
-        print "KeyboardInterrupt called"
+        print("KeyboardInterrupt called")
     
 
     # Print and save results
@@ -128,11 +129,11 @@ if __name__ == "__main__":
         probs += model.predict(tst.X)
     probs /= float(NUM_SAMPLES)
     preds = probs.argmax(axis=-1)
-    print 'Final accuracy (using %d samples): %0.5f' % (NUM_SAMPLES, np.mean(preds == tst.y))
+    print('Final accuracy (using %d samples): %0.5f' % (NUM_SAMPLES, np.mean(preds == tst.y)))
 
     logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
-    print '# ENDRESULTS:',
+    print('# ENDRESULTS: ',sep="")
     for k, v in logs.iteritems():
-        print "%s=%s"%(k,v),
-    print
+        print("%s=%s "%(k,v), sep="")
+    print()
 

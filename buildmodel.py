@@ -119,7 +119,7 @@ def buildmodel(opts, trn):
 
         cur_layer = Dense(hdim, **layer_args)(cur_layer)
 
-    predictions = Dense(trn.nb_classes, init='glorot_uniform', activation='softmax')(cur_layer)
-    model = Model(input=inputs, output=predictions)
+    predictions = Dense(trn.nb_classes, kernel_initializer='glorot_uniform', activation='softmax')(cur_layer)
+    model = Model(inputs=inputs, outputs=predictions)
     
     return model, cbs, noiselayer, micalculator
