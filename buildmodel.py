@@ -61,9 +61,9 @@ def buildmodel(opts, trn):
         layer_args = {}    
         layer_args['activation'] = HIDDEN_ACTS[hndx]
         if layer_args['activation'] == 'relu':
-            layer_args['init'] = 'he_uniform' 
+            layer_args['kernel_initializer'] = 'he_uniform' 
         else:
-            layer_args['init'] = 'glorot_uniform'
+            layer_args['kernel_initializer'] = 'glorot_uniform'
         #if args.maxnorm is not None:
         #    import keras.constraints
         #    layer_args['W_constraint'] = keras.constraints.maxnorm(args.maxnorm)
@@ -110,9 +110,9 @@ def buildmodel(opts, trn):
         layer_args = {}    
         layer_args['activation'] = 'relu' # opts['DECODING_ACTS'][hndx]
         if layer_args['activation'] == 'relu':
-            layer_args['init'] = 'he_uniform' 
+            layer_args['kernel_initializer'] = 'he_uniform' 
         else:
-            layer_args['init'] = 'glorot_uniform'
+            layer_args['kernel_initializer'] = 'glorot_uniform'
         #if args.maxnorm is not None:
         #    import keras.constraints
         #    layer_args['W_constraint'] = keras.constraints.maxnorm(args.maxnorm)
