@@ -20,7 +20,7 @@ class Reporter(Callback):
         
     def on_epoch_end(self, epoch, logs={}):
         l = self.get_logs(calculate_mi=self.on_epoch_report_mi)
-        for k, v in l.iteritems():
+        for k, v in l.items():
             logs[k]=v
             print("%s=%s "%(k,v), sep="")
         print()

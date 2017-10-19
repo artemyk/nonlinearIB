@@ -115,7 +115,7 @@ print('Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(pred
 print('# ENDARGS:', arg_dict)
 logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
 print('# ENDRESULTS: ', sep="")
-for k, v in logs.iteritems():
+for k, v in logs.items():
     print("%s=%s "%(k,v), sep="")
 print()
 
