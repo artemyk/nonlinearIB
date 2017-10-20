@@ -65,7 +65,7 @@ f = K.function([model.layers[0].input, K.learning_phase()], [noiselayer.output,]
 hiddenlayer_activations = f([trn.X,0])[0]
 
 plt.figure(figsize=(5,5))
-plt.scatter(hiddenlayer[:,0], hiddenlayer[:,1], marker='.', edgecolor='none', c=trn.y, alpha=0.05)
+plt.scatter(hiddenlayer_activations[:,0], hiddenlayer_activations[:,1], marker='.', edgecolor='none', c=trn.y, alpha=0.05)
 plt.xticks([]); plt.yticks([])
 
 plt.savefig('fig2.png')
