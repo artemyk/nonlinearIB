@@ -1,8 +1,61 @@
 import numpy as np
 import scipy
+import scipy.optimize
+
 import keras.backend as K
 import keras
 from collections import namedtuple
+
+
+# TODO: Describe
+class ParameterTrainer(keras.callbacks.Callback):
+    def __init__(self, loss, parameter, trn, minibatchsize, *kargs, **kwargs):
+        super(ParameterTrainer, self).__init__(*kargs, **kwargs)
+        self.loss = loss
+        self.parameter = parameter
+        self.trn = trn
+        self.minibatchsize = minibatchsize
+        
+
+    def on_train_begin(self, logs={}):
+        # Loss and parameter should be defined by this point
+        inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
+        f_obj = K.function(inputs, [self.loss,])
+        f_jac = K.function(inputs, [K.gradients(self.loss, self.parameter),])
+        
+        def getixs(x):
+            k = x.flat[0]
+            if k not in self.random_samples:
+                self.random_samples[k] = np.random.choice(len(self.trn.X), self.minibatchsize)
+            return self.random_samples[k]
+        
+        def obj(x):
+            ixs = getixs(x)
+            oldval = K.get_value(self.parameter)
+            K.set_value(self.parameter, x.flat[0])
+            r = f_obj([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])[0]
+            K.set_value(self.parameter, oldval)
+            return r
+        
+        def jac(x):
+            ixs = getixs(x)
+            oldval = K.get_value(self.parameter)
+            K.set_value(self.parameter, x.flat[0])
+            r = f_jac([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])
+            K.set_value(self.parameter, oldval)
+            return np.atleast_2d(np.array(r[0]))[0]
+        
+        self.obj = obj
+        self.jac = jac
+        
+    def on_epoch_begin(self, epoch, logs={}):
+        self.random_samples = {}
+        r = scipy.optimize.minimize(self.obj, K.get_value(self.parameter).flat[0], jac=self.jac)
+        best_val = r.x.flat[0]
+        K.set_value(self.parameter, best_val)
+        del self.random_samples
+
+        
 
 def np_entropy(p):
     cp = np.log(p)
@@ -62,6 +115,24 @@ def get_mnist(trainN=None, testN=None):
     del X_train, X_test, Y_train, Y_test, y_train, y_test
     
     return trn, tst
+
+
+def get_nlIB_layer(model):
+    from nonlinearib import NonlinearIB
+    nlIB_layer = None
+    for layer in model.layers:
+        if isinstance(layer, NonlinearIB):
+            if nlIB_layer is None:
+                nlIB_layer = layer
+            else:
+                raise Exception('Only one NonlinearIB layer supported by Reporter')
+
+    if nlIB_layer is None:
+        raise Exception('No NonlinearIB layers found')
+        
+    return nlIB_layer
+
+
 
 
 # Backend specific code
