@@ -3,71 +3,55 @@ from __future__ import print_function
 import numpy as np
 import keras.backend as K
 from keras.callbacks import Callback
-import copy
 from collections import OrderedDict
-from entropy import np_entropy
 
-#nats2bits = np.array(1.0/np.log(2), dtype='float32')
+import nonlinearib, utils
 
+from keras.callbacks import Callback
 
 class Reporter(Callback):
-    def __init__(self, trn, tst, noiselayer, micalculator, on_epoch_report_mi=False):
+    def __init__(self, trn, tst):
         self.trn = trn
         self.tst = tst
-        self.noiselayer = noiselayer
-        self.micalculator = micalculator
-        self.on_epoch_report_mi = on_epoch_report_mi
+    
+    def on_train_begin(self, logs=None):
+        self.nlIB_layer = None
+        for layer in self.model.layers:
+            if isinstance(layer, nonlinearib.NonlinearIB):
+                if self.nlIB_layer is None:
+                    self.nlIB_layer = layer
+                else:
+                    raise Exception('Only one NonlinearIB layer supported by Reporter')
+                    
+        if self.nlIB_layer is None:
+            raise Exception('No NonlinearIB layers found')
+            
+        self.to_log = OrderedDict()
+        self.to_log['noiseLV'] = self.nlIB_layer.noise_logvar
+        self.to_log['kdeLV']   = self.nlIB_layer.kde_logvar
+        self.to_log['mi_trn']  = self.nlIB_layer.IBpenalty(utils.tensor_constant(self.trn.X))[0]
+        self.to_log['mi_tst']  = self.nlIB_layer.IBpenalty(utils.tensor_constant(self.tst.X))[0]
+        
+        self.h_trn = utils.np_entropy(self.trn.Y.mean(axis=0))
+        self.h_tst = utils.np_entropy(self.tst.Y.mean(axis=0))
         
     def on_epoch_end(self, epoch, logs={}):
-        l = self.get_logs(calculate_mi=self.on_epoch_report_mi)
-        for k, v in l.items():
+        if not len(logs):
+            logs = OrderedDict()
+            
+        for k, v in self.to_log.items():
+            logs[k] = float(K.get_value(v))
+        
+        # Compute cross entropy of predictions
+        inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
+        lossfunc = K.function(inputs, [self.model.total_loss])
+        logs['loss_trn'] = lossfunc([self.trn.X, self.trn.Y, np.ones(len(self.trn.X)), 0])[0]
+        logs['loss_tst'] = lossfunc([self.tst.X, self.tst.Y, np.ones(len(self.tst.X)), 0])[0]
+        logs['loss_mi_trn'] = self.h_trn - logs['loss_trn']
+        logs['loss_mi_tst'] = self.h_tst - logs['loss_tst']
+        
+        for k, v in logs.items():
             logs[k]=v
             print("%s=%s "%(k,v), sep="")
         print()
-    
-    def get_logs(self, calculate_mi=False, calculate_loss=False):
-        logs = OrderedDict()
         
-        if self.noiselayer is not None and hasattr(self.noiselayer, 'logvar'):
-            logs['noiseLV'] = K.get_value(self.noiselayer.logvar)
-
-        inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
-        trn_inputs = [self.trn.X, self.trn.Y, np.ones(len(self.trn.X)), 0]
-        tst_inputs = [self.tst.X, self.tst.Y, np.ones(len(self.tst.X)), 0]
-        
-        if self.micalculator is not None and hasattr(self.micalculator, 'kde_logvar'):
-                logs['kdeLV'] = K.get_value(self.micalculator.kde_logvar)
-                
-        if self.micalculator is not None and calculate_mi:
-            f = K.function(inputs, [self.noiselayer.input])
-            noiselayer_inputs = {}
-            noiselayer_inputs['trn']  = f(trn_inputs)[0]
-            noiselayer_inputs['tst']  = f(tst_inputs)[0]
-
-            for k in ['trn','tst']:
-                mi_calc = self.micalculator
-                if k != 'trn' and hasattr(mi_calc, 'set_data'):
-                    mi_calc = copy.copy(mi_calc)
-                    mi_calc.set_data(self.tst.X)
-
-                h, hcond = 0., 0.
-                c_in = K.variable(noiselayer_inputs[k])
-                mi = K.function([], [mi_calc.get_mi(c_in)])([])[0]
-                #if hasattr(mi_calc, 'get_h'):
-                #    h     = K.function([], [mi_calc.get_h(c_in)])([])[0]
-                #if hasattr(mi_calc, 'get_hcond'):
-                #    hcond = K.function([], [mi_calc.get_hcond(c_in)])([])[0]
-                #logs['mi_'+k] = map(float, [mi, h, hcond])
-                logs['mi_'+k] = float(mi)
-
-        if calculate_loss:
-            h_trn = np_entropy(self.trn.Y.mean(axis=0))
-            h_tst = np_entropy(self.tst.Y.mean(axis=0))
-            # Compute cross entropy of predictions
-            lossfunc = K.function(inputs, [self.model.total_loss])
-            logs['loss_trn'] = lossfunc(trn_inputs)[0]
-            logs['loss_tst'] = lossfunc(tst_inputs)[0]
-            logs['loss_mi_trn'] = h_trn - logs['loss_trn']
-            logs['loss_mi_tst'] = h_tst - logs['loss_tst']
-        
-        return logs
