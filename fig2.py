@@ -41,8 +41,21 @@ outputs = Dense(trn.nb_classes, activation='softmax')(decoder)
 model = Model(inputs=input_layer, outputs=outputs)
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
+
+init_lr = 0.001
+lr_decay = 0.5
+lr_decaysteps = 15
+import keras.callbacks
+def lrscheduler(epoch):
+    lr = init_lr * lr_decay**np.floor(epoch / lr_decaysteps)
+    #lr = max(lr, 1e-5)
+    print('Learning rate: %.7f' % lr)
+    return lr
+lr_callback = keras.callbacks.LearningRateScheduler(lrscheduler)
+
 model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=128, epochs=200, 
-          validation_data=(tst.X, tst.Y), callbacks=[nonlinearIB_callback])
+          validation_data=(tst.X, tst.Y), 
+          callbacks=[nonlinearIB_callback, lr_callback])
 
 #%matplotlib inline
 import matplotlib.pyplot as plt
