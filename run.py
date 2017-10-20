@@ -95,7 +95,7 @@ fit_args = dict(
 )
 
 model.compile(loss='categorical_crossentropy', optimizer=args.optimizer, metrics=['accuracy'])
-
+print(model.get_config())
 hist=None
 try:
     r = model.fit(**fit_args)
