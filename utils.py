@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import numpy as np
 import scipy
 import scipy.optimize
@@ -7,9 +9,26 @@ import keras
 from collections import namedtuple
 
 
-# TODO: Describe
 class ParameterTrainer(keras.callbacks.Callback):
     def __init__(self, loss, parameter, trn, minibatchsize, *kargs, **kwargs):
+        """
+        This callback selects the value of parameter (a Keras variable, 
+        typically a parameter of some layer) that minimizes loss (another Keras
+        variable).  It uses scipy.optimize.minimize to do so, and feeds 
+        in stochastically sampled minibatches of traininig data
+        
+        Parameters
+        ----------
+        loss : Keras variable
+            The loss to minimize.
+        parameter : Keras variable
+            The variable to minimize over
+        trn : np.array
+            Training data to use while minimizing
+        minibatchsize : int
+            Number of training data to sample during each gradient step
+        """
+        
         super(ParameterTrainer, self).__init__(*kargs, **kwargs)
         self.loss = loss
         self.parameter = parameter
@@ -18,12 +37,19 @@ class ParameterTrainer(keras.callbacks.Callback):
         
 
     def on_train_begin(self, logs={}):
-        # Loss and parameter should be defined by this point
+        """Initialize objective and jacobian functions.
+        """
+        
         inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
         f_obj = K.function(inputs, [self.loss,])
         f_jac = K.function(inputs, [K.gradients(self.loss, self.parameter),])
         
         def getixs(x):
+            """Sample random indices.  We store the sampled indices so that they are
+            available from both the objective and jacobian functions.
+            self.random_samples should be reinitalized as a blank dictionary before
+            every optimization run.
+            """
             k = x.flat[0]
             if k not in self.random_samples:
                 self.random_samples[k] = np.random.choice(len(self.trn.X), self.minibatchsize)
@@ -48,6 +74,7 @@ class ParameterTrainer(keras.callbacks.Callback):
         self.obj = obj
         self.jac = jac
         
+        
     def on_epoch_begin(self, epoch, logs={}):
         self.random_samples = {}
         r = scipy.optimize.minimize(self.obj, K.get_value(self.parameter).flat[0], jac=self.jac)
@@ -58,12 +85,16 @@ class ParameterTrainer(keras.callbacks.Callback):
         
 
 def np_entropy(p):
+    """Compute Shannon entropy of a non-Keras variable.
+    """
     cp = np.log(p)
     cp[np.isclose(p,0.)]=0.
     return -p.dot(cp)
 
 
 def logsumexp(mx, axis):
+    """Use Keras to compute logsumexp.
+    """
     cmax = K.max(mx, axis=axis)
     cmax2 = K.expand_dims(cmax, 1)
     mx2 = mx - cmax2
@@ -71,25 +102,18 @@ def logsumexp(mx, axis):
 
 
 def dist_mx(X):
+    """Keras code to compute the pairwise distance matrix for a set of
+    vectors specifie by the matrix X.
+    """
     x2 = K.expand_dims(K.sum(K.square(X), axis=1), 1)
     dists = x2 + K.transpose(x2) - 2*K.dot(X, K.transpose(X))
     return dists
 
 
-def get_input_layer(clayer):
-    if not hasattr(clayer, 'inbound_nodes') or len(clayer.inbound_nodes) == 0 or \
-       len(clayer.inbound_nodes[0].inbound_layers) == 0:
-        return None
-    if len(clayer.inbound_nodes) > 1:
-        raise Exception("Currently doesn't work with multi-input layers")
-    input_node = clayer.inbound_nodes[0]
-    if len(input_node.inbound_layers) > 1:
-        raise Exception("Currently doesn't work with multi-input layers")
-    return input_node.inbound_layers[0]
-
-
 def get_mnist(trainN=None, testN=None):
-    # Initialize MNIST dataset
+    """Initialize MNIST dataset.
+    """
+    
     nb_classes = 10
     (X_train, y_train), (X_test, y_test) = keras.datasets.mnist.load_data()
     X_train = np.reshape(X_train, [X_train.shape[0], -1]).astype('float32') / 255.
@@ -117,29 +141,13 @@ def get_mnist(trainN=None, testN=None):
     return trn, tst
 
 
-def get_nlIB_layer(model):
-    from nonlinearib import NonlinearIB
-    nlIB_layer = None
-    for layer in model.layers:
-        if isinstance(layer, NonlinearIB):
-            if nlIB_layer is None:
-                nlIB_layer = layer
-            else:
-                raise Exception('Only one NonlinearIB layer supported by Reporter')
-
-    if nlIB_layer is None:
-        raise Exception('No NonlinearIB layers found')
-        
-    return nlIB_layer
-
-
-
-
 # Backend specific code
 
 if K._BACKEND == 'tensorflow':
     import tensorflow as tf
     def K_n_choose_k(n, k, seed=None):
+        """Keras code for drawing k samples, without replacement, from 1..n.
+        """
         if seed is None:
             seed = np.random.randint(10e6)
         x = tf.range(0, limit=n, dtype='int32')
@@ -148,13 +156,19 @@ if K._BACKEND == 'tensorflow':
         return x
 
     def tensor_eye(size):
+        """Keras code for generating an identity matrix.
+        """
         return tf.eye(size)
 
     def tensor_constant(x):
+        """Convert a numpy array into a Keras constant.
+        """
         return tf.constant(x) 
 
     
 else:
+    # See descriptions above.
+    
     import theano.tensor as T
     def K_n_choose_k(n, k, seed=None):
         from theano.tensor.shared_randomstreams import RandomStreams
