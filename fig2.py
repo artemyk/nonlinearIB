@@ -58,6 +58,8 @@ model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=128, epochs=200,
           callbacks=[nonlinearIB_callback, lr_callback])
 
 #%matplotlib inline
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import keras.backend as K
