@@ -7,8 +7,6 @@ from keras.models import Model
 import keras.backend as K
 import keras
 
-import matplotlib.pyplot as plt
-
 import nonlinearib, reporting, utils
 
 trn, tst = utils.get_mnist()
@@ -45,6 +43,10 @@ r = model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=64, epochs=200, validation
 
 f = K.function([model.layers[0].input, K.learning_phase()], [nlIB_layer.output,])
 hiddenlayer_activations = f([trn.X,0])[0]
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 # Plot results
 plt.figure(figsize=(5,5))
