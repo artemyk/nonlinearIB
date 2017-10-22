@@ -7,8 +7,6 @@ from keras.models import Model
 import keras.backend as K
 import keras
 
-import matplotlib.pyplot as plt
-
 import nonlinearib, reporting, utils
 
 trn, tst = utils.get_mnist()
@@ -40,11 +38,15 @@ callbacks = nlIB_layer.get_training_callbacks(model, trn=trn, minibatchsize=1000
 callbacks.append(lr_callback)
 #callbacks.append(reporting.Reporter(trn=trn, tst=tst, verbose=2))
 
-r = model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=64, epochs=200, validation_data=(tst.X, tst.Y), callbacks=callbacks)
+r = model.fit(x=trn.X, y=trn.Y, verbose=2, batch_size=64, epochs=100, validation_data=(tst.X, tst.Y), callbacks=callbacks)
 
 
 f = K.function([model.layers[0].input, K.learning_phase()], [nlIB_layer.output,])
 hiddenlayer_activations = f([trn.X,0])[0]
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 # Plot results
 plt.figure(figsize=(5,5))
@@ -52,3 +54,4 @@ plt.scatter(hiddenlayer_activations[:,0], hiddenlayer_activations[:,1], marker='
 plt.xticks([]); plt.yticks([])
 
 plt.savefig('fig2_v3.png')
+
