@@ -14,6 +14,7 @@ class NonlinearIB(Layer):
                  test_phase_noise      = False,
                  init_kde_logvar       = -5.,
                  init_noise_logvar     = -10.,
+                 noise_logvar_train_firstepoch = 0,
                  *kargs, **kwargs):
         """
         Construct a Keras layer for implementing nonlinear IB
@@ -28,6 +29,9 @@ class NonlinearIB(Layer):
             Initial (logarithm of) variance of KDE estimator
         init_noise_logvar : float, optional
             Initial (logarithm of) variance of Gaussian noise
+        noise_logvar_train_firstepoch : int, optional
+            First epoch on which to begin training noise_logvar.  None to 
+            eliminate training of this parameter
         """
         
         self.supports_masking      = True
@@ -38,6 +42,7 @@ class NonlinearIB(Layer):
         self.init_kde_logvar       = init_kde_logvar
         self.init_noise_logvar     = init_noise_logvar
         self.test_phase_noise      = test_phase_noise
+        self.noise_logvar_train_firstepoch = noise_logvar_train_firstepoch
         
         super(NonlinearIB, self).__init__(*kargs, **kwargs)
         
@@ -61,10 +66,29 @@ class NonlinearIB(Layer):
         if train_kde_logvar:
             cbs.append( utils.ParameterTrainer(loss=self.kde_loo_loss, parameter=self.kde_logvar, trn=trn, minibatchsize=minibatchsize) )
         if train_noise_logvar:
-            cbs.append( utils.ParameterTrainer(loss=model.total_loss, parameter=self.noise_logvar, trn=trn, minibatchsize=minibatchsize) )
+            cbs.append( utils.ParameterTrainer(loss=model.total_loss, parameter=self.noise_logvar, trn=trn, minibatchsize=minibatchsize,
+                                               first_epoch=self.noise_logvar_train_firstepoch) )
             
         return cbs
 
+    def get_mi(self, x, dists=None):
+        # Computes an estimate of the mutual information
+        # pass in distance matrix if it already exists, so it doesn't have to be recomputed
+        dims = K.cast( K.shape(x)[1], K.floatx() ) 
+        N    = K.cast( K.shape(x)[0], K.floatx() )
+        
+        if dists is None:
+            dists = utils.dist_mx(x)
+            
+        total_var   = K.exp(self.noise_logvar) + K.exp(self.kde_logvar)
+        normconst   = (dims/2.0)*K.log(2*np.pi*total_var)
+        lprobs      = utils.logsumexp(-dists / (2*total_var), axis=1) - K.log(N) - normconst
+        h           = -K.mean(lprobs)
+        hcond       = (dims/2.0)*K.log(2*np.pi*K.exp(self.noise_logvar))
+        
+        return h - hcond
+        
+        
     def call(self, x, training=None):
         dims = K.cast( K.shape(x)[1], K.floatx() ) 
         N    = K.cast( K.shape(x)[0], K.floatx() )
@@ -72,16 +96,9 @@ class NonlinearIB(Layer):
         # Gets an NxN matrix of pairwise distances between each vector in minibatch
         dists = utils.dist_mx(x)
         
-        # Computes an estimate of the mutual information
-        total_var   = K.exp(self.noise_logvar) + K.exp(self.kde_logvar)
-        normconst   = (dims/2.0)*K.log(2*np.pi*total_var)
-        lprobs      = utils.logsumexp(-dists / (2*total_var), axis=1) - K.log(N) - normconst
-        h           = -K.mean(lprobs)
-        hcond       = normconst
-        self.mi     = h - hcond
+        self.mi = self.get_mi(x, dists)
         
         self.add_loss([K.in_train_phase(self.beta_var * self.mi, K.variable(0.0), training),])
-        
         
         # Computes an estimate of the leave-one-out log probability loss, used
         # for training KDE bandwidth

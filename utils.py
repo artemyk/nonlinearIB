@@ -10,7 +10,7 @@ from collections import namedtuple
 
 
 class ParameterTrainer(keras.callbacks.Callback):
-    def __init__(self, loss, parameter, trn, minibatchsize, *kargs, **kwargs):
+    def __init__(self, loss, parameter, trn, minibatchsize, first_epoch=0, *kargs, **kwargs):
         """
         This callback selects the value of parameter (a Keras variable, 
         typically a parameter of some layer) that minimizes loss (another Keras
@@ -27,6 +27,8 @@ class ParameterTrainer(keras.callbacks.Callback):
             Training data to use while minimizing
         minibatchsize : int
             Number of training data to sample during each gradient step
+        first_epoch : int, optional
+            First epoch on which to begin training parameter
         """
         
         super(ParameterTrainer, self).__init__(*kargs, **kwargs)
@@ -34,6 +36,7 @@ class ParameterTrainer(keras.callbacks.Callback):
         self.parameter = parameter
         self.trn = trn
         self.minibatchsize = minibatchsize
+        self.first_epoch = first_epoch
         
 
     def on_train_begin(self, logs={}):
@@ -74,14 +77,22 @@ class ParameterTrainer(keras.callbacks.Callback):
         self.obj = obj
         self.jac = jac
         
-        
-    def on_epoch_begin(self, epoch, logs={}):
+    def do_optimization(self):
         self.random_samples = {}
         r = scipy.optimize.minimize(self.obj, K.get_value(self.parameter).flat[0], jac=self.jac)
         best_val = r.x.flat[0]
         K.set_value(self.parameter, best_val)
         del self.random_samples
 
+    def on_epoch_begin(self, epoch, logs={}):
+        if self.first_epoch is not None and epoch >= self.first_epoch:
+            self.do_optimization()
+        
+        
+    def on_train_end(self, logs={}):
+        self.do_optimization()
+        
+        
         
 
 def np_entropy(p):

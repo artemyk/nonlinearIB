@@ -18,7 +18,7 @@ hidden_output  = Dense(800, activation='relu')(input_layer)
 hidden_output  = Dense(800, activation='relu')(hidden_output)
 hidden_output  = Dense(2 , activation='linear')(hidden_output)
 
-nlIB_layer     = nonlinearib.NonlinearIB(beta=0.4)
+nlIB_layer     = nonlinearib.NonlinearIB(beta=0.4, noise_logvar_train_firstepoch=10)
 nlIB_output    = nlIB_layer(hidden_output)
 
 decoder_output = Dense(800, activation='relu')(nlIB_output)
@@ -51,4 +51,4 @@ plt.figure(figsize=(5,5))
 plt.scatter(hiddenlayer_activations[:,0], hiddenlayer_activations[:,1], marker='.', edgecolor='none', c=trn.y, alpha=0.05)
 plt.xticks([]); plt.yticks([])
 
-plt.savefig('fig2.png')
+plt.savefig('fig2_v3.png')

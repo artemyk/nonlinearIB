@@ -59,7 +59,7 @@ class Reporter(keras.callbacks.Callback):
         logs['logvar_kde']   = np.array(K.eval(self.nlIB_layer.kde_logvar))
         
         if include_mi:
-            # TODO skipping every 10ths
+            # TODO skipping 
             trn_skip = int(len(self.trn.X)/5000)
             tst_skip = int(len(self.tst.X)/5000)
             logs['MI(X;M)_trn']  = self.mifunc([self.trn.X[::trn_skip], self.trn.Y[::trn_skip], np.ones(len(self.trn.X[::trn_skip])), 0])[0]
