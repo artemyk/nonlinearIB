@@ -31,10 +31,11 @@ class Reporter(keras.callbacks.Callback):
     MI(X;M) (compression mutual information) and MI(M;Y) (prediction mutual information).
     Also prints (logarithm) of variance of noise and KDE.
     """
-    def __init__(self, trn, tst, verbose=2):
+    def __init__(self, trn, tst, verbose=2, report_every=1):
         self.trn = trn
         self.tst = tst
         self.verbose = verbose # Verbosity level
+        self.report_every = report_every
     
     def on_train_begin(self, logs={}):
         self.nlIB_layer = get_nlIB_layer(self.model)
@@ -44,7 +45,7 @@ class Reporter(keras.callbacks.Callback):
         self.h_tst = utils.np_entropy(self.tst.Y.mean(axis=0))
         
     def on_epoch_end(self, epoch, logs={}):
-        if self.verbose > 0:
+        if epoch % self.report_every == 0 and self.verbose > 0:
             l = self.get_logs(self.verbose > 1)
             for k in sorted(l.keys()):
                 v = l[k]
@@ -67,7 +68,9 @@ class Reporter(keras.callbacks.Callback):
             
             # Compute cross entropy of predictions
             inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
-            lossfunc = K.function(inputs, [self.model.total_loss])
+
+            # TODO sample weight and masks not supported right now
+            lossfunc = K.function(inputs, [K.mean(K.categorical_crossentropy(self.model.targets[0], self.model.outputs[0]))])
             logs['CrossEntropy_trn'] = lossfunc([self.trn.X, self.trn.Y, np.ones(len(self.trn.X)), 0])[0]
             logs['CrossEntropy_tst'] = lossfunc([self.tst.X, self.tst.Y, np.ones(len(self.tst.X)), 0])[0]
             logs['MI(Y;M)_trn'] = self.h_trn - logs['CrossEntropy_trn']

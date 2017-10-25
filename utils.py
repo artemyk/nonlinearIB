@@ -10,7 +10,11 @@ from collections import namedtuple
 
 
 class ParameterTrainer(keras.callbacks.Callback):
-    def __init__(self, loss, parameter, trn, minibatchsize, first_epoch=0, *kargs, **kwargs):
+    def __init__(self, loss, parameter, trn, minibatchsize, 
+                 first_epoch=0, 
+                 init_value=None, 
+                 bounds=None, 
+                 *kargs, **kwargs):
         """
         This callback selects the value of parameter (a Keras variable, 
         typically a parameter of some layer) that minimizes loss (another Keras
@@ -29,6 +33,11 @@ class ParameterTrainer(keras.callbacks.Callback):
             Number of training data to sample during each gradient step
         first_epoch : int, optional
             First epoch on which to begin training parameter
+        init_value : int, optional
+            Initial value of parameter to feed into optimizer.  None to use
+            current value.
+        bounds : list, optional
+            Bounds to provide to optimizer.
         """
         
         super(ParameterTrainer, self).__init__(*kargs, **kwargs)
@@ -37,7 +46,8 @@ class ParameterTrainer(keras.callbacks.Callback):
         self.trn = trn
         self.minibatchsize = minibatchsize
         self.first_epoch = first_epoch
-        
+        self.init_value = init_value
+        self.bounds = bounds
 
     def on_train_begin(self, logs={}):
         """Initialize objective and jacobian functions.
@@ -45,54 +55,72 @@ class ParameterTrainer(keras.callbacks.Callback):
         
         inputs = self.model.inputs + self.model.targets + self.model.sample_weights + [ K.learning_phase(),]
         f_obj = K.function(inputs, [self.loss,])
-        f_jac = K.function(inputs, [K.gradients(self.loss, self.parameter),])
+        #f_jac = K.function(inputs, [K.gradients(self.loss, self.parameter),])
         
-        def getixs(x):
-            """Sample random indices.  We store the sampled indices so that they are
-            available from both the objective and jacobian functions.
-            self.random_samples should be reinitalized as a blank dictionary before
-            every optimization run.
-            """
-            k = x.flat[0]
-            if k not in self.random_samples:
-                self.random_samples[k] = np.random.choice(len(self.trn.X), self.minibatchsize)
-            return self.random_samples[k]
+        # def getixs(x):
+        #     """Sample random indices.  We store the sampled indices so that they are
+        #     available from both the objective and jacobian functions.
+        #     self.random_samples should be reinitalized as a blank dictionary before
+        #     every optimization run.
+        #     """
+        #     k = x.flat[0]
+        #     if k not in self.random_samples:
+        #         self.random_samples[k] = np.random.choice(len(self.trn.X), self.minibatchsize)
+        #     return self.random_samples[k]
         
-        def obj(x):
-            ixs = getixs(x)
+        ixs = np.random.choice(len(self.trn.X), self.minibatchsize)
+        # def getixs(x):
+        #     return ixs
+        
+        # def optfunc(x):
+        #     oldval = K.get_value(self.parameter)
+        #     K.set_value(self.parameter, x.flat[0])
+        #     # TODO print("Objective at", x, "=", r, " jacbian=", r2)
+        #     r  = f_obj([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])[0]
+        #     r2 = f_jac([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])
+        #     r2 = np.atleast_2d(np.array(r2[0]))[0]
+        #     K.set_value(self.parameter, oldval)
+        #     return [r, r2]
+        def optfunc(x):
             oldval = K.get_value(self.parameter)
-            K.set_value(self.parameter, x.flat[0])
-            r = f_obj([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])[0]
+            K.set_value(self.parameter, x)
+            # TODO print("Objective at", x, "=", r, " jacbian=", r2)
+            r  = f_obj([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])[0]
             K.set_value(self.parameter, oldval)
             return r
         
-        def jac(x):
-            ixs = getixs(x)
-            oldval = K.get_value(self.parameter)
-            K.set_value(self.parameter, x.flat[0])
-            r = f_jac([self.trn.X[ixs], self.trn.Y[ixs], np.ones(self.minibatchsize), 1])
-            K.set_value(self.parameter, oldval)
-            return np.atleast_2d(np.array(r[0]))[0]
-        
-        self.obj = obj
-        self.jac = jac
+        self.optfunc = optfunc
         
     def do_optimization(self):
-        self.random_samples = {}
-        r = scipy.optimize.minimize(self.obj, K.get_value(self.parameter).flat[0], jac=self.jac)
-        best_val = r.x.flat[0]
+        if self.init_value is None:
+            init_value = K.get_value(self.parameter).flat[0]
+        else:
+            init_value = self.init_value
+        #r = scipy.optimize.minimize(self.optfunc, init_value, jac=True, bounds=self.bounds, method='SLSQP')
+        #best_val = r.x.flat[0]
+        r = scipy.optimize.minimize_scalar(self.optfunc, method='brent')
+        best_val = r.x
         K.set_value(self.parameter, best_val)
-        del self.random_samples
 
     def on_epoch_begin(self, epoch, logs={}):
-        if self.first_epoch is not None and epoch >= self.first_epoch:
+        if epoch >= self.first_epoch:
             self.do_optimization()
         
         
     def on_train_end(self, logs={}):
         self.do_optimization()
         
-        
+
+# class AddToLoss(keras.callbacks.Callback):
+#     def __init__(self, layer, loss, on_epoch, *kargs, **kwargs):
+#         super(AddToLoss, self).__init__(*kargs, **kwargs)
+#         self.on_epoch = on_epoch
+#         self.loss = loss
+#         self.layer = layer
+#     def on_epoch_begin(self, epoch, logs={}):
+#         if epoch == self.on_epoch:
+#             self.layer.add_loss([self.loss,])
+
         
 
 def np_entropy(p):
@@ -103,13 +131,13 @@ def np_entropy(p):
     return -p.dot(cp)
 
 
-def logsumexp(mx, axis):
-    """Use Keras to compute logsumexp.
-    """
-    cmax = K.max(mx, axis=axis)
-    cmax2 = K.expand_dims(cmax, 1)
-    mx2 = mx - cmax2
-    return cmax + K.log(K.sum(K.exp(mx2), axis=1))
+# def logsumexp(mx, axis=0):
+#     """Use Keras to compute logsumexp.
+#     """
+#     cmax = K.max(mx, axis=axis)
+#     cmax2 = K.expand_dims(cmax, 1)
+#     mx2 = mx - cmax2
+#     return cmax + K.log(K.sum(K.exp(mx2), axis=1))
 
 
 def dist_mx(X):
