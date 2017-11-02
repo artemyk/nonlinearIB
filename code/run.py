@@ -1,18 +1,15 @@
-# Requires: Keras-1.2.1, tensorflow-0.12.1 or theano 0.8.2
+# Requires: Keras-2, tensorflow-0.13 or theano 0.8.2
+from __future__ import print_function
 
-import argparse, os, cPickle, logging
+import argparse, os, logging
 import numpy as np
 from Loggers import Logger, FileLogger
 
-import scipy.io as sio
-import matplotlib as mpl
-if os.environ.get('DISPLAY','') == '':
-    print('no display found. Using non-interactive Agg backend')
-    mpl.use('Agg')
-import matplotlib.pyplot as plt
-import plotly.plotly as py
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
-#import 
 parser = argparse.ArgumentParser(description='Run nonlinear IB on MNIST dataset',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--backend', default='theano', choices=['tensorflow','theano'],
@@ -86,7 +83,7 @@ trn, tst = buildmodel.get_mnist(args.trainN, args.testN)
 # ***************************
 
 arg_dict['INPUT_DIM'] = trn.X.shape[1]
-print '# ARGS:', arg_dict
+print('# ARGS:', arg_dict)
 
 model, cbs, noiselayer, micalculator = buildmodel.buildmodel(arg_dict, trn=trn)
 
@@ -99,7 +96,7 @@ cbs.append(reporter)
 def lrscheduler(epoch):
     lr = args.init_lr * args.lr_decay**np.floor(epoch / args.lr_decaysteps)
     #lr = max(lr, 1e-5)
-    print 'Learning rate: %.7f' % lr
+    print('Learning rate: %.7f' % lr)
     return lr
 cbs.append(keras.callbacks.LearningRateScheduler(lrscheduler))
 #cbs.append(keras.callbacks.TensorBoard(log_dir=LOG_DIR, histogram_freq=0, write_graph=True, write_grads=False,\
@@ -110,13 +107,13 @@ fit_args = dict(
     y          = trn.Y,
     verbose    = 2,
     batch_size = args.batch_size,
-    nb_epoch   = args.nb_epoch,
+    epochs     = args.nb_epoch,
     validation_data  = (tst.X, tst.Y),
     callbacks  = cbs,
 )
 
 model.compile(loss='categorical_crossentropy', optimizer=args.optimizer, metrics=['accuracy'])
-
+print(model.get_config())
 hist=None
 try:
     r = model.fit(**fit_args)
@@ -125,9 +122,10 @@ try:
     for key, value_list in hist.iteritems():
         for idx, value in enumerate(value_list):
             logger.log_value(key, value, step = idx)
-except KeyboardInterrupt:
-    print "KeyboardInterrupt called"
 
+except KeyboardInterrupt:
+    print("KeyboardInterrupt called")
+    
 
 # Print and save results
 probs = 0.
@@ -135,42 +133,30 @@ get_IB_layer_output = keras.backend.function([model.layers[0].input],[model.laye
 
 for _ in range(args.predict_samples):
     probs += model.predict(tst.X)
-    layer_output = get_IB_layer_output([tst.X])[0]
 
+probs /= float(args.predict_samples)
+preds = probs.argmax(axis=-1)
+print('Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(preds == tst.y)))
+
+print('# ENDARGS:', arg_dict)
+logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
+print('# ENDRESULTS: ', sep="")
+for k, v in logs.items():
+    print("%s=%s "%(k,v), sep="")
+print()
 
 try: 
     os.stat('../distribution_map/{}/'.format(suffix))
 except:
     os.makedirs('../distribution_map/{}/'.format(suffix))
 
-for i in range(10):
-    point_by_number = layer_output[tst.y==i,:]
-    plt.scatter(point_by_number[:,0],point_by_number[:,1], color='C{}'.format(i), label=str(i))
-plt.legend(loc=4)
-plt.savefig('../distribution_map/{}/point_distribution.png'.format(suffix), bbox_inches='tight')
-plt.clf()
+sfx = '%s-%s-%s-%f' % (args.mode, args.encoder, args.decoder, args.beta)
+fname = "models/fitmodel-%s.h5"%sfx
+print("saving to %s"%fname)
+model.save_weights(fname)
 
-probs /= float(args.predict_samples)
-preds = probs.argmax(axis=-1)
-print 'Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(preds == tst.y))
-
-#print '# ENDARGS:', arg_dict
-#logs = reporter.get_logs(calculate_mi=True, calculate_loss=True)
-#print '# ENDRESULTS:',
-#for k, v in logs.iteritems():
-#    print "%s=%s"%(k,v),
-#print
-#
-#
-#sfx = '%s-%s-%s-%f' % (args.mode, args.encoder, args.decoder, args.beta)
-#fname = "models/fitmodel-%s.h5"%sfx
-#print "saving to %s"%fname
-#model.save_weights(fname)
-#
-#savedhistfname="models/savedhist-%s.dat"%sfx
-#with open(savedhistfname, 'wb') as f:
-#    cPickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
-#    print 'updated', savedhistfname
-
-
+savedhistfname="models/savedhist-%s.dat"%sfx
+with open(savedhistfname, 'wb') as f:
+    pickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
+    print('updated', savedhistfname)
 

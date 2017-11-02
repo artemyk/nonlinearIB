@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import numpy as np
 import keras.backend as K
 from keras.callbacks import Callback
@@ -18,10 +20,10 @@ class Reporter(Callback):
         
     def on_epoch_end(self, epoch, logs={}):
         l = self.get_logs(calculate_mi=self.on_epoch_report_mi)
-        for k, v in l.iteritems():
+        for k, v in l.items():
             logs[k]=v
-            print "%s=%s"%(k,v),
-        print
+            print("%s=%s "%(k,v), sep="")
+        print()
     
     def get_logs(self, calculate_mi=False, calculate_loss=False):
         logs = OrderedDict()

@@ -48,6 +48,7 @@ process_set = []
 
 for idx, parameter in enumerate(parameter_set):
     print('Test Parameter: {}'.format(parameter))
+    
     command = 'python run.py --nb_epoch 60 --mode=nlIB --beta={} --gpu-id {} --backend tensorflow'\
             .format(parameter, gpu_set[idx%number_gpu])
 

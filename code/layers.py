@@ -33,6 +33,7 @@ class NoiseLayer(Layer):
             self.trainable_weights = []
         
     def get_noise(self, x):
+        
         return K.exp(0.5*self.logvar) * K.random_normal(shape=K.shape(x), mean=0., stddev=1)
     
     def call(self, x, mask=None):
@@ -71,7 +72,8 @@ else:
         return r
     
 class MICalculator(regularizers.Regularizer):
-    def __init__(self, beta, model_layers, same_batch=False, data=None, miN=None, init_kde_logvar=-5.):
+    def __init__(self, beta, model_layers, same_batch=False, data=None, miN=1000, init_kde_logvar=-5.):
+        # miN is the batch size used to compute MI estimates
         self.beta            = beta
         self.init_kde_logvar = init_kde_logvar
         self.model_layers    = model_layers
