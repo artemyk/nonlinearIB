@@ -77,7 +77,6 @@ class MICalculator(regularizers.Regularizer):
         self.beta            = beta
         self.init_kde_logvar = init_kde_logvar
         self.model_layers    = model_layers
-        print(model_layers) 
         self.same_batch = same_batch
         
         self.miN  = miN

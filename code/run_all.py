@@ -1,6 +1,6 @@
 """
-Check the correctness of gor on HardNet loss using multiple GPUs
-Usage: check_gor_HardNet.py
+Run multiple parameter with multiple GPUs and one python script 
+Usage: python run_all.py
 
 Author: Xu Zhang
 Email: xu.zhang@columbia.edu.cn
@@ -41,7 +41,6 @@ parameter_set = ['regular','nlIB']
 #parameter_set = ['0.2','0.4']
 
 number_gpu = len(gpu_set)
-#datasets = ['notredame', 'yosemite', 'liberty']
 process_set = []
 
 for idx, parameter in enumerate(parameter_set):
@@ -49,9 +48,6 @@ for idx, parameter in enumerate(parameter_set):
     
     command = 'python run.py --nb_epoch 60 --mode={} --beta=0.4 --gpu-id {} --backend tensorflow'\
             .format(parameter, gpu_set[idx%number_gpu])
-
-    #command = 'python run.py --nb_epoch 60 --mode={} --beta={} --gpu-id {} --backend tensorflow'\
-    #        .format(parameter, gpu_set[idx%number_gpu])
 
     print(command)
     p = subprocess.Popen(shlex.split(command))
