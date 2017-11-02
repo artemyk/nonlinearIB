@@ -69,7 +69,6 @@ def buildmodel(opts, trn):
 
         model_layers.append( Dense(hdim, **layer_args) )
 
-    #model_layers.append(Dense(2))
     if opts['mode'] in ['nlIB', 'nlIBnokde', 'vIB']:
         test_phase_noise = not opts['no_test_phase_noise']
         if opts['mode'] == 'nlIB' or opts['mode'] == 'nlIBnokde':

@@ -145,17 +145,12 @@ for k, v in logs.items():
     print("%s=%s "%(k,v), sep="")
 print()
 
-try: 
-    os.stat('../distribution_map/{}/'.format(suffix))
-except:
-    os.makedirs('../distribution_map/{}/'.format(suffix))
-
 sfx = '%s-%s-%s-%f' % (args.mode, args.encoder, args.decoder, args.beta)
-fname = "models/fitmodel-%s.h5"%sfx
+fname = "../models/fitmodel-%s.h5"%sfx
 print("saving to %s"%fname)
 model.save_weights(fname)
 
-savedhistfname="models/savedhist-%s.dat"%sfx
+savedhistfname="../models/savedhist-%s.dat"%sfx
 with open(savedhistfname, 'wb') as f:
     pickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
     print('updated', savedhistfname)

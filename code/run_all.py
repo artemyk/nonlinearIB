@@ -37,24 +37,21 @@ class cd:
         os.chdir(self.savedPath)
 
 gpu_set = ['0','1']
-#parameter_set = ['regular','nlIB']
-parameter_set = ['0.2','0.4']
+parameter_set = ['regular','nlIB']
+#parameter_set = ['0.2','0.4']
 
 number_gpu = len(gpu_set)
-
 #datasets = ['notredame', 'yosemite', 'liberty']
 process_set = []
-
 
 for idx, parameter in enumerate(parameter_set):
     print('Test Parameter: {}'.format(parameter))
     
-    command = 'python run.py --nb_epoch 60 --mode=nlIB --beta={} --gpu-id {} --backend tensorflow'\
+    command = 'python run.py --nb_epoch 60 --mode={} --beta=0.4 --gpu-id {} --backend tensorflow'\
             .format(parameter, gpu_set[idx%number_gpu])
 
     #command = 'python run.py --nb_epoch 60 --mode={} --beta={} --gpu-id {} --backend tensorflow'\
     #        .format(parameter, gpu_set[idx%number_gpu])
-
 
     print(command)
     p = subprocess.Popen(shlex.split(command))
