@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import argparse, os, logging
 import numpy as np
+from Loggers import Logger, FileLogger
 
 try:
     import cPickle as pickle
@@ -15,6 +16,7 @@ parser.add_argument('--backend', default='theano', choices=['tensorflow','theano
                     help='Deep learning backend to use')
 parser.add_argument('--mode', choices=['regular','dropout','vIB','nlIB', 'nlIBnokde'], default='nlIB',
     help='Regularization mode')
+parser.add_argument('--log_dir', default='../logs/', help='folder to output log')
 parser.add_argument('--nb_epoch', type=int, default=60, help='Number of epochs')
 parser.add_argument('--beta' , type=float, default=0.0, help='beta hyperparameter value')
 parser.add_argument('--init_kde_logvar', type=float, default=-5., help='Initialize log variance of KDE estimator')
@@ -31,15 +33,18 @@ parser.add_argument('--lr_decaysteps', type=int, default=10, help='Number of ite
 parser.add_argument('--lr_decay', type=float, default=0.5, help='Learning rate decay rate (applied every lr_decaysteps)')
 parser.add_argument('--no_test_phase_noise', action='store_true', default=False, help='Disable noise during testing phase')
 
-parser.add_argument('--encoder', type=str, default='800-800', help='Encoder network architecture')
-parser.add_argument('--encoder_acts', type=str, default='relu-relu', help='Encoder layer activations')
+parser.add_argument('--encoder', type=str, default='800-800-20', help='Encoder network architecture')
+parser.add_argument('--encoder_acts', type=str, default='relu-relu-relu', help='Encoder layer activations')
 parser.add_argument('--decoder', type=str, default='', help='Decoder network architecture')
 parser.add_argument('--predict_samples', type=int, default=1, help='No. of samples to measure accuracy at end of run')
 parser.add_argument('--epoch_report_mi', action='store_true', default=False, help='Report MI values every epoch?')
 parser.add_argument('--noise_logvar_nottrainable', action='store_true', default=False, help='Dont train noise variance')
 parser.add_argument('--same_minibatch', action='store_true', default=False, help='Use same mini-batch for optimizing prediction error and for MI')
-
+parser.add_argument('--gpu-id', default='0', type=str,
+                    help='id(s) for CUDA_VISIBLE_DEVICES')
 args = parser.parse_args()
+
+os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
 
 if args.no_test_phase_noise and args.predict_samples > 1:
     raise Exception('Multiple predictions samples only makes sense if test-phase noise present')
@@ -53,6 +58,17 @@ else:
     import os ; os.environ['KERAS_BACKEND']='tensorflow'
 
 logging.getLogger('keras').setLevel(logging.INFO)
+
+if args.mode == 'nlIB':
+    suffix = '{}_encoder{}_beta{:1.1f}'.format(args.mode,args.encoder,args.beta)
+else:
+    suffix = '{}_encoder{}'.format(args.mode,args.encoder)
+
+LOG_DIR = args.log_dir
+if not os.path.isdir(LOG_DIR):
+    os.makedirs(LOG_DIR)
+LOG_DIR = args.log_dir + suffix
+logger = Logger(LOG_DIR)
 
 import reporting
 import buildmodel
@@ -83,6 +99,8 @@ def lrscheduler(epoch):
     print('Learning rate: %.7f' % lr)
     return lr
 cbs.append(keras.callbacks.LearningRateScheduler(lrscheduler))
+#cbs.append(keras.callbacks.TensorBoard(log_dir=LOG_DIR, histogram_freq=0, write_graph=True, write_grads=False,\
+#        write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None))
 
 fit_args = dict(
     x          = trn.X,
@@ -100,14 +118,22 @@ hist=None
 try:
     r = model.fit(**fit_args)
     hist = r.history
+    #print(hist)
+    for key, value_list in hist.iteritems():
+        for idx, value in enumerate(value_list):
+            logger.log_value(key, value, step = idx)
+
 except KeyboardInterrupt:
     print("KeyboardInterrupt called")
     
 
 # Print and save results
 probs = 0.
+get_IB_layer_output = keras.backend.function([model.layers[0].input],[model.layers[2].output])
+
 for _ in range(args.predict_samples):
     probs += model.predict(tst.X)
+
 probs /= float(args.predict_samples)
 preds = probs.argmax(axis=-1)
 print('Accuracy (using %d samples): %0.5f' % (args.predict_samples, np.mean(preds == tst.y)))
@@ -119,16 +145,13 @@ for k, v in logs.items():
     print("%s=%s "%(k,v), sep="")
 print()
 
-
 sfx = '%s-%s-%s-%f' % (args.mode, args.encoder, args.decoder, args.beta)
-fname = "models/fitmodel-%s.h5"%sfx
+fname = "../models/fitmodel-%s.h5"%sfx
 print("saving to %s"%fname)
 model.save_weights(fname)
 
-savedhistfname="models/savedhist-%s.dat"%sfx
+savedhistfname="../models/savedhist-%s.dat"%sfx
 with open(savedhistfname, 'wb') as f:
     pickle.dump({'args':arg_dict, 'history':hist,  'endlogs': logs}, f)
     print('updated', savedhistfname)
-
-
 

@@ -42,7 +42,6 @@ def get_mnist(trainN=None, testN=None):
 def buildmodel(opts, trn):
     noiselayer   = None
     micalculator = None
-    
     # Build model
     inputs = Input(shape=(opts['INPUT_DIM'],))
     model_layers = []
