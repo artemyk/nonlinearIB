@@ -19,6 +19,7 @@ class NonlinearIB(Layer):
                  noise_logvar_train_firstepoch = 0,
                  trainable_noise_logvar = True,
                  trainable_kde_logvar   = True,
+                 deterministic_ib       = False,
                  *kargs, **kwargs):
         """
         Construct a Keras layer for implementing nonlinear IB
@@ -50,6 +51,8 @@ class NonlinearIB(Layer):
         
         self.trainable_noise_logvar = trainable_noise_logvar
         self.trainable_kde_logvar   = trainable_kde_logvar
+        
+        self.deterministic_ib       = deterministic_ib
         
         super(NonlinearIB, self).__init__(*kargs, **kwargs)
         
@@ -90,7 +93,7 @@ class NonlinearIB(Layer):
             
         return cbs
 
-    def get_mi(self, x, dists=None):
+    def get_ib_cost(self, x, dists=None):
         # Computes an estimate of the mutual information
         # pass in distance matrix if it already exists, so it doesn't have to be recomputed
         dims = K.cast( K.shape(x)[1], K.floatx() ) 
@@ -107,9 +110,12 @@ class NonlinearIB(Layer):
         normconst   = (dims/2.0)*(LOG2PI + K.log(total_var))
         lprobs      = K.logsumexp(-dists / (2*total_var), axis=1) - K.log(N) - normconst
         h           = -K.mean(lprobs)
-        hcond       = (dims/2.0)*(LOG2PI + self.noise_logvar)
         
-        return h - hcond
+        if self.deterministic_ib:
+            return h
+        else:
+            hcond  = (dims/2.0)*(LOG2PI + self.noise_logvar)
+            return h - hcond
         
         
     def call(self, x, training=None):
@@ -119,7 +125,7 @@ class NonlinearIB(Layer):
         # Gets an NxN matrix of pairwise distances between each vector in minibatch
         dists = utils.dist_mx(x)
         
-        self.mi = self.get_mi(x, dists)
+        self.mi = self.get_ib_cost(x, dists)
         
         # TODO
         #self.add_loss([K.in_train_phase(self.include_mi_loss * self.beta_var * self.mi, K.variable(0.0), training),])
