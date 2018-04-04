@@ -24,7 +24,7 @@ class NoiseLayerVIB(Layer):
     def get_noise(self, sigmas):
         return sigmas * K.random_normal(shape=K.shape(sigmas))
     
-    def get_output_shape_for(self, input_shape):
+    def compute_output_shape(self, input_shape):
         return (input_shape[0], self.mean_dims)
     
     def get_means_sigmas(self, x):
@@ -95,8 +95,8 @@ if __name__ == "__main__":
     c_layer = Dense(512 , kernel_initializer='he_uniform', activation='linear', activity_regularizer=micalculator)(c_layer)
     
     c_layer = noiselayer(c_layer)
-    predictions = Dense(trn.nb_classes, init='he_uniform', activation='softmax')(c_layer)
-    model = Model(input=inputs, output=predictions)
+    predictions = Dense(trn.nb_classes, kernel_initializer='he_uniform', activation='softmax')(c_layer)
+    model = Model(inputs=inputs, outputs=predictions)
     
     # Set up callbacks
     cbs = []
