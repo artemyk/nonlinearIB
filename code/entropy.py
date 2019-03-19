@@ -1,49 +1,52 @@
 import numpy as np
-import scipy
-import keras.backend as K
+import tensorflow as tf
 
-def np_entropy(p):
-    cp = np.log(p)
-    cp[np.isclose(p,0.)]=0.
-    return -p.dot(cp)
 
-def logsumexp(mx, axis):
-    cmax = K.max(mx, axis=axis)
-    cmax2 = K.expand_dims(cmax, 1)
-    mx2 = mx - cmax2
-    return cmax + K.log(K.sum(K.exp(mx2), axis=1))
-
-def kde_entropy(output, var):
-    # Kernel density estimate of entropy, in nats
-
-    dims = K.cast(K.shape(output)[1], K.floatx() ) 
-    N    = K.cast(K.shape(output)[0], K.floatx() )
-    
-    normconst = (dims/2.0)*K.log(2*np.pi*var)
-            
-    # get dists matrix
-    x2 = K.expand_dims(K.sum(K.square(output), axis=1), 1)
-    dists = x2 + K.transpose(x2) - 2*K.dot(output, K.transpose(output))
-    dists = dists / (2*var)
-    
-    lprobs = logsumexp(-dists, axis=1) - K.log(N) - normconst
-    h = -K.mean(lprobs)
-    
+def Gaussian_entropy(d, log_var):
+    # Entropy of a Gaussian distribution with 'd' dimensions and log variance 'log_var'
+    h = 0.5 * d * (tf.cast(tf.log(2.0 * np.pi * np.exp(1)), tf.float32) + log_var)
     return h
 
-def kde_condentropy(output, var):
-    # Return entropy of a multivariate Gaussian, in nats
 
-    dims = K.cast(K.shape(output)[1], K.floatx() )
-    normconst = (dims/2.0)*K.log(2*np.pi*var)
-    return normconst
+def GMM_entropy(dist, log_var, d, bound='upper'):
+    # computes bounds for the entropy of a homoscedastic Gaussian mixture model [Kolchinsky, 2017]
+    # dist: a matrix of pairwise distances
+    # log_var: the log-variance of the mixture components
+    # d: number of dimensions
+    # n: number of mixture components
+    n = tf.cast(tf.shape(dist)[0], tf.float32)
+    var = tf.exp(log_var) + 1e-6
 
-def kde_entropy_from_dists_loo(dists, N, dims, var):
-    # Given a distance matrix dists, return leave-one-out kernel density estimate of entropy
-    # Dists should have very large values on diagonal (to make those contributions drop out)
-    dists2 = dists / (2*var)
-    normconst = (dims/2.0)*K.log(2*np.pi*var)
-    lprobs = logsumexp(-dists2, axis=1) - np.log(N-1) - normconst
-    h = -K.mean(lprobs)
+    if bound is 'upper':
+        dist_norm = - dist / (2.0 * var)  # uses the KL distance
+    elif bound is 'lower':
+        dist_norm = - dist / (8.0 * var)  # uses the Bhattacharyya distance
+    else:
+        print('Error: invalid bound argument')
+        return 0
+
+    const = 0.5 * d * tf.log(2.0 * np.pi * np.exp(1.0) * var) + tf.log(n)
+    h = const - tf.reduce_mean(tf.reduce_logsumexp(dist_norm, 1))
     return h
 
+
+def GMM_negative_LLH(dist, log_var, d):
+    # computes the leave-one-out log likelihood of the log variance of a homoscedastic GMM
+    # dist: a matrix of pairwise distances (tf.placeholder)
+    # log_var: the log variance of a GMM (tf.variable)
+    # d: number of dimensions
+    # n: number of data points
+    n = tf.cast(tf.shape(dist)[0], tf.float32)
+    var = tf.exp(log_var) + 1e-6
+
+    dist_norm = -(dist + 1e10 * tf.eye(tf.cast(n, tf.int32))) / (2.0 * var)  # add a large number to the diagonal elements to implement 'leave-one-out'
+    const = -n * tf.log(n - 1) - 0.5 * n * d * tf.log(2.0 * np.pi * var)
+    llh = const + tf.reduce_sum(tf.reduce_logsumexp(dist_norm, 1))
+    return -llh
+
+
+def pairwise_distance(x):
+    # returns a matrix where each element is the distance between each pair of rows in x
+    xx = tf.reduce_sum(tf.square(x), 1, keepdims=True)
+    dist = xx - 2.0 * tf.matmul(x, tf.transpose(x)) + tf.transpose(xx)
+    return dist
