@@ -51,8 +51,8 @@ class Net(object):
         prior = ds.Normal(0.0, 1.0)
         encoding = ds.Normal(self.encoder[-1], tf.exp(self.log_sigma2))
         self.vIxt = tf.reduce_sum(tf.reduce_mean(ds.kl_divergence(encoding, prior), 0))
-        self.vIB_loss           = self.beta*(self.vIxt**2) - self.Iyt
-        self.vIB_trainstep      = self.adam_optimizer.minimize(self.vIB_loss)
+        self.VIB_loss           = self.beta*(self.vIxt**2) - self.Iyt
+        self.VIB_trainstep      = self.adam_optimizer.minimize(self.VIB_loss)
         
         
         if trainable_sigma:
