@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import entropy
+ds = tf.contrib.distributions
+
 
 class Net(object):
     def __init__(self, encoder_arch, decoder_arch, init_beta = 0.0, trainable_sigma = True, log_sigma2 = 0., log_eta2 = 0.):
@@ -31,10 +33,6 @@ class Net(object):
         hiddenD = encoder_arch[-1][0]
         
         self.distance_matrix = entropy.pairwise_distance(self.encoder[-1])
-        # negative log-likelihood for the 'width' of the GMM
-        self.neg_llh_eta = entropy.GMM_negative_LLH(self.distance_matrix, self.log_eta2, hiddenD)   
-        self.eta_optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.neg_llh_eta, var_list=[self.log_eta2])
-        
         
         self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.y, logits=self.predY))
         self.accuracy       = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(self.predY, 1), tf.argmax(self.y, 1)), tf.float32))
@@ -47,9 +45,21 @@ class Net(object):
         self.Iyt = tf.log(10.0) - self.cross_entropy
 
         self.adam_optimizer = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999) # learning_rate=self.learning_rate_ph, epsilon=0.0001)
-        self.loss           = self.beta*(self.Ixt**2) - self.Iyt
-        self.trainstep      = self.adam_optimizer.minimize(self.loss)
+        self.nlIB_loss           = self.beta*(self.Ixt**2) - self.Iyt
+        self.nlIB_trainstep      = self.adam_optimizer.minimize(self.nlIB_loss)
 
+        prior = ds.Normal(0.0, 1.0)
+        encoding = ds.Normal(self.encoder[-1], tf.exp(self.log_sigma2))
+        self.vIxt = tf.reduce_sum(tf.reduce_mean(ds.kl_divergence(encoding, prior), 0))
+        self.vIB_loss           = self.beta*(self.vIxt**2) - self.Iyt
+        self.vIB_trainstep      = self.adam_optimizer.minimize(self.vIB_loss)
+        
+        
         if trainable_sigma:
+            raise Exception('Not supported (must support for VIB also)')
             self.sigma_optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, var_list=[self.log_sigma2])
 
+        # negative log-likelihood for the 'width' of the GMM
+        self.neg_llh_eta = entropy.GMM_negative_LLH(self.distance_matrix, self.log_eta2, hiddenD)   
+        self.eta_optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.neg_llh_eta, var_list=[self.log_eta2])
+        
