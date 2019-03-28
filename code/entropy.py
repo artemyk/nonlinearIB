@@ -15,7 +15,7 @@ def GMM_entropy(dist, log_var, d, bound='upper'):
     # d: number of dimensions
     # n: number of mixture components
     n = tf.cast(tf.shape(dist)[0], tf.float32)
-    var = tf.exp(log_var) + 1e-6
+    var = tf.exp(log_var) + 1e-10
 
     if bound is 'upper':
         dist_norm = - dist / (2.0 * var)  # uses the KL distance
