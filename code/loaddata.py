@@ -19,14 +19,16 @@ def load_mnist(n_data=None):
     test_labels = one_hot(test_labels)
 
     if n_data is not None:
-        data = {'train_data': train_data[:n_data], 'train_labels': train_labels[:n_data], 'test_data': test_data[:n_data], 'test_labels': test_labels[:n_data]}
+        data = {'trn_data': train_data[:n_data], 'trn_labels': train_labels[:n_data], 'tst_data': test_data[:n_data], 'test_labels': test_labels[:n_data]}
     else:
-        data = {'train_data': train_data, 'train_labels': train_labels, 'test_data': test_data, 'test_labels': test_labels}
+        data = {'trn_data': train_data, 'trn_labels': train_labels, 'tst_data': test_data, 'tst_labels': test_labels}
 
     return data
 
 
 def one_hot(x, n_classes=None):
+    assert(np.array(x).ndim == 1)
+    
     # input: 1D array of N labels, output: N x max(x)+1 array of one-hot vectors
     if n_classes is None:
         n_classes = max(x) + 1
