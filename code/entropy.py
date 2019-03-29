@@ -1,3 +1,5 @@
+# Utility functions for computing entropy values
+
 import numpy as np
 import tensorflow as tf
 from randomgen import RandomGenerator, MT19937
@@ -5,12 +7,12 @@ import scipy
 rnd = RandomGenerator(MT19937())
 
 
-def Gaussian_entropy(d, var):
+def gaussian_entropy(d, var):
     # Entropy of a Gaussian distribution with 'd' dimensions and log variance 'log_var'
     h = 0.5 * d * (tf.cast(tf.log(2.0 * np.pi * np.exp(1)), tf.float32) + tf.log(var))
     return h
 
-def Gaussian_entropy_np(d, var):
+def gaussian_entropy_np(d, var):
     # Entropy of a Gaussian distribution with 'd' dimensions and log variance 'log_var'
     h = 0.5 * d * np.log(2.0 * np.pi * np.exp(1)) + np.log(var)
     return h
@@ -77,3 +79,34 @@ def get_mc_entropy(mx, var):
     logprobs  = const + scipy.special.logsumexp(dist_norm , axis=0) 
 
     return -np.mean(logprobs)
+
+
+def get_gib_curve(covXY, xdims):
+    # get optimal IB curve for gaussian variables
+    #http://www.jmlr.org/papers/volume6/chechik05a/chechik05a.pdf
+
+    covX = covXY[:xdims,:xdims]
+    covY = covXY[xdims:,xdims:]
+    covXgY = covX - covXY[:xdims,xdims:].dot(np.linalg.inv(covY)).dot(covXY[xdims:,:xdims])
+    mainMx = covXgY.dot(np.linalg.inv(covX))
+
+    evecs, evals = np.linalg.eig(mainMx)
+    #print(evecs.min(), evecs.max())
+    assert(np.all(evecs >= -1e-5) and np.all(evecs <= 1+1e-5))
+    ix = np.argsort(evecs)
+    sorted_evecs = np.real(evecs[ix])
+    sorted_evecs = sorted_evecs[np.logical_not(np.isclose(sorted_evecs, 1))]
+    
+
+    v1, v2 = [], []
+    for alpha in np.linspace(0., 1000, 1000):
+        #last_alpha = np.flatnonzero(alpha >= 1./(1.-sorted_evecs))[-1]
+        #print(last_alpha)
+
+        Itx = 0.5*np.sum([np.log(alpha*(1-l)/l) for l in sorted_evecs if alpha >= 1./(1.-l)])
+        Ity = Itx - 0.5*np.sum([np.log(alpha*(1-l)) for l in sorted_evecs if alpha >= 1./(1.-l)])
+
+        v1.append(Itx)
+        v2.append(Ity)
+        
+    return np.array(v1), np.array(v2)
