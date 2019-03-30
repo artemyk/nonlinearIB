@@ -14,7 +14,7 @@ def gaussian_entropy(d, var):
 
 def gaussian_entropy_np(d, var):
     # Entropy of a Gaussian distribution with 'd' dimensions and log variance 'log_var'
-    h = 0.5 * d * np.log(2.0 * np.pi * np.exp(1)) + np.log(var)
+    h = 0.5 * d * (np.log(2.0 * np.pi * np.exp(1)) + np.log(var))
     return h
 
 
