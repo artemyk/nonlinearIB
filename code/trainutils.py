@@ -26,8 +26,45 @@ def load_mnist(n_data=None):
         data = {'trn_X': train_data, 'trn_Y': train_labels, 
                 'tst_X': test_data , 'tst_Y': test_labels}
 
+    data['entropyY'] = np.log(10)
     return data
 
+def load_wine():
+    mx = np.vstack([
+        np.genfromtxt('data/winequality-red.csv',delimiter=";", skip_header=1),
+        np.genfromtxt('data/winequality-white.csv',delimiter=";", skip_header=1),
+    ])
+    np.random.seed(12345)
+    permutation  = np.random.permutation(len(mx))
+    mx = mx[permutation,:]
+
+    X = mx[permutation,:-1]
+    y = mx[permutation,-1]
+    #Y = one_hot(y.astype('int')) # 
+    Y = np.zeros( (len(mx), 2))
+    Y[y < 6,0] = 1.0 
+    Y[y >= 6,1] = 1.0 
+    #Y[y == 5,:] = 0.5
+    ps = Y.mean(axis=0)
+    entropyY = np.sum([-p*np.log(p) for p in ps if not np.isclose(p,0)])
+                      
+    hl = int(len(mx)/2)
+
+    data = { 'trn_X' : X[:hl,:], 'trn_Y': Y[:hl,:],
+             'tst_X' : X[hl:,:], 'tst_Y': Y[hl:,:],
+             'entropyY' : entropyY}
+    
+    return data
+
+def load_szt():
+    # Data from artificial dataset used in Schwartz-Ziv and Tishby
+    d1 = scipy.io.loadmat('data/g1.mat')
+    d2 = scipy.io.loadmat('data/g2.mat')
+    data = { 'trn_X' : d1['F'].astype('float32'), 'trn_Y': trainutils.one_hot(d1['y'].flat),
+             'tst_X' : d2['F'].astype('float32'), 'tst_Y': trainutils.one_hot(d2['y'].flat),
+             'entropyY': np.log(2)}
+    return data
+    
 
 def one_hot(x, n_classes=None):
     assert(np.array(x).ndim == 1)
@@ -117,16 +154,17 @@ def train(sess, mode, beta, cfg, data, n, optimizer, report_every, fname, fit_va
         
         x_batch, y_batch, dmatrix = None, None, None
             
-        # Set kernel width
-        x_batch = train_X[:n_noisevar_batch]
-        y_batch = train_Y[:n_noisevar_batch]
-        dmatrix = sess.run(n.distance_matrix, feed_dict={n.x: x_batch})
-        n.eta_optimizer.minimize(sess, feed_dict={n.distance_matrix_ph: dmatrix})
-        
-        # Set noise variance with scipy, if needed
-        if (mode != 'ce') and ((fit_var and epoch == 0) or (cfg['train_noisevar']=='scipy' and epoch % 30 == 0)):
-            opt = tf.contrib.opt.ScipyOptimizerInterface(loss, var_list=[n.phi])
-            opt.minimize(sess, feed_dict={n.x: x_batch, n.y: y_batch})
+        if mode != 'ce':
+            # Set kernel width
+            x_batch = train_X[:n_noisevar_batch]
+            y_batch = train_Y[:n_noisevar_batch]
+            dmatrix = sess.run(n.distance_matrix, feed_dict={n.x: x_batch})
+            n.eta_optimizer.minimize(sess, feed_dict={n.distance_matrix_ph: dmatrix})
+
+            # Set noise variance with scipy, if needed
+            if (fit_var and epoch == 0) or (cfg['train_noisevar']=='scipy' and epoch % 30 == 0):
+                opt = tf.contrib.opt.ScipyOptimizerInterface(loss, var_list=[n.phi])
+                opt.minimize(sess, feed_dict={n.x: x_batch, n.y: y_batch})
         
         
         cdata = stats(sess, mode, beta, loss, epoch, data, n, epoch % report_every == 0)

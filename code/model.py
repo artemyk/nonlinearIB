@@ -36,14 +36,13 @@ class Net(object):
         self.distance_matrix = entropy.pairwise_distance(self.encoder[-1])
         
         
-        # eta is the kernel width
+        # eta is the kernel width for fitting the GMM, in softplus space
         self.eta      = tf.get_variable('eta', dtype=tf.float32, trainable=False, initializer=-5.)
         self.etavar   = tf.nn.softplus(self.eta)
-        # for fitting the GMM
-        self.distance_matrix_ph = tf.placeholder(dtype=tf.float32, shape=[None, None])  
         # placeholder to speed up scipy optimizer
-        self.neg_llh_eta = entropy.GMM_negative_LLH(self.distance_matrix_ph, self.etavar, hiddenD)   
+        self.distance_matrix_ph = tf.placeholder(dtype=tf.float32, shape=[None, None]) 
         # negative log-likelihood for the 'width' of the GMM
+        self.neg_llh_eta = entropy.GMM_negative_LLH(self.distance_matrix_ph, self.etavar, hiddenD)   
         self.eta_optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.neg_llh_eta, var_list=[self.eta])
 
         
@@ -53,6 +52,7 @@ class Net(object):
             f = tf.losses.mean_squared_error(self.y, self.predY)
         else:
             raise Exception('unknown err_func')
+            
         self.cross_entropy   = tf.reduce_mean(f)
         self.accuracy        = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(self.predY, 1), tf.argmax(self.y, 1)), tf.float32))
         self.Iyt             = entropyY - self.cross_entropy
@@ -64,6 +64,8 @@ class Net(object):
         self.H_T         = entropy.GMM_entropy(self.distance_matrix, self.noisevar + self.etavar, hiddenD, 'upper')
         self.Ixt         = self.H_T - self.H_T_given_X
 
+        # Variational IB code, based on Alemi
+        # https://github.com/alexalemi/vib_demo/blob/master/MNISTVIB.ipynb
         prior            = ds.Normal(0.0, 1.0)
         encoding         = ds.Normal(self.encoder[-1], self.noisevar)
         self.vIxt        = tf.reduce_sum(tf.reduce_mean(ds.kl_divergence(encoding, prior), 0))
