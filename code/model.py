@@ -70,6 +70,9 @@ class Net(object):
         encoding         = ds.Normal(self.encoder[-1], self.noisevar)
         self.vIxt        = tf.reduce_sum(tf.reduce_mean(ds.kl_divergence(encoding, prior), 0))
         
+        self.vH_T        = self.vIxt + self.H_T_given_X
+        
+        
         # list of network parameters, excluding ones changing variance / kernel width
         self.no_var_params = [v for v in tf.trainable_variables() if v not in [self.phi, self.eta]]
         
