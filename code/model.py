@@ -5,33 +5,38 @@ ds = tf.contrib.distributions
 
 class Net(object):
     def __init__(self, input_dims, encoder_arch, decoder_arch, err_func, entropyY, trainable_noisevar = True, noisevar = 0.):
-        hiddenD   = encoder_arch[-1][0]  # bottleneck layer dimensionality
+        hiddenD       = encoder_arch[-1][0]  # bottleneck layer dimensionality
 
-        self.x    = tf.placeholder(dtype=tf.float32, shape=[None, input_dims])           # inputs
-        self.y    = tf.placeholder(dtype=tf.float32, shape=[None, decoder_arch[-1][0]])  # outputs
+        self.x        = tf.placeholder(dtype=tf.float32, name='X', shape=[None, input_dims])           # inputs
+        self.y        = tf.placeholder(dtype=tf.float32, name='Y', shape=[None, decoder_arch[-1][0]])  # outputs
         
         # phi is the noise variance (in softplus space) 
-        init_phi = np.log(np.exp(noisevar) - 1.).astype('float32') # softplus inverse
+        init_phi      = np.log(np.exp(noisevar) - 1.).astype('float32') # softplus inverse
         self.trainable_noisevar = trainable_noisevar
         if trainable_noisevar:
-            self.phi    = tf.get_variable('phi', dtype=tf.float32, trainable=True, initializer=init_phi)
+            self.phi  = tf.get_variable('phi', dtype=tf.float32, trainable=True, initializer=init_phi)
         else:
-            self.phi    = tf.get_variable('phi', dtype=tf.float32, trainable=False, initializer=init_phi)
+            self.phi  = tf.get_variable('phi', dtype=tf.float32, trainable=False, initializer=init_phi)
         self.noisevar = tf.nn.softplus(self.phi)
         
         
-        # build the neural network
-        self.encoder = [self.x,]
-        for neurons, activation in encoder_arch:
-            self.encoder.append(tf.layers.dense(self.encoder[-1], neurons, activation=activation))
+        # START building the neural network
+        self.encoder  = [self.x,]
+        for endx, (neurons, act) in enumerate(encoder_arch):
+            self.encoder.append(tf.layers.dense(self.encoder[-1], neurons, name='encoder_%d'%endx, activation=act))
+            
+        tf.identity(self.encoder[-1], name="T_nonoise")
+            
         noise         = tf.random_normal(shape=tf.shape(self.encoder[-1]), 
                                          mean=0.0, stddev=tf.sqrt(self.noisevar), dtype=tf.float32)
-        self.T        = self.encoder[-1] + noise
+        self.T        = self.encoder[-1] + noise # hidden layer with noise
+        
         self.decoder  = [self.T,]
-        for neurons, activation in decoder_arch:
-            self.decoder.append(tf.layers.dense(self.decoder[-1], neurons, activation=activation))
+        for dndx, (neurons, act) in enumerate(decoder_arch):
+            self.decoder.append(tf.layers.dense(self.decoder[-1], neurons, name='decoder_%d'%dndx, activation=act))
             
         self.predY    = self.decoder[-1]
+        # END building the neural network
         
         self.distance_matrix = entropy.pairwise_distance(self.encoder[-1])
         
@@ -42,8 +47,8 @@ class Net(object):
         # placeholder to speed up scipy optimizer
         self.distance_matrix_ph = tf.placeholder(dtype=tf.float32, shape=[None, None]) 
         # negative log-likelihood for the 'width' of the GMM
-        self.neg_llh_eta = entropy.GMM_negative_LLH(self.distance_matrix_ph, self.etavar, hiddenD)   
-        self.eta_optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.neg_llh_eta, var_list=[self.eta])
+        self.neg_llh_eta        = entropy.GMM_negative_LLH(self.distance_matrix_ph, self.etavar, hiddenD)   
+        self.eta_optimizer      = tf.contrib.opt.ScipyOptimizerInterface(self.neg_llh_eta, var_list=[self.eta])
 
         
         if err_func == 'softmax_ce':
