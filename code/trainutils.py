@@ -23,7 +23,7 @@ def stats(sess, mode, beta, loss, epoch, data, n, do_print=False):
             
     if do_print:
         print()
-        print('mode: %s epoch: %d | beta: %0.4f | noisevar: %g | kw: %g' % (mode, epoch+1, beta, noisevar, etavar))
+        print('mode: %s epoch: %d | beta: %0.4f | noisevar: %g | kw: %g' % (mode, epoch, beta, noisevar, etavar))
         for mlist in [['ce','acc', 'loss'], ['Ixt', 'Ixt_lb', 'vIxt', 'Iyt']]:
             for m in mlist:
                 print("%s: % 0.3f/% 0.3f | " % (m, cdata['trn'][m], cdata['tst'][m]), end="")
