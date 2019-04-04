@@ -73,8 +73,8 @@ def load_szt():
     # Data from artificial dataset used in Schwartz-Ziv and Tishby
     d1 = scipy.io.loadmat('data/g1.mat')
     d2 = scipy.io.loadmat('data/g2.mat')
-    data = { 'trn_X' : d1['F'].astype('float32'), 'trn_Y': trainutils.one_hot(d1['y'].flat),
-             'tst_X' : d2['F'].astype('float32'), 'tst_Y': trainutils.one_hot(d2['y'].flat),
+    data = { 'trn_X' : d1['F'].astype('float32'), 'trn_Y': one_hot(d1['y'].flat),
+             'tst_X' : d2['F'].astype('float32'), 'tst_Y': one_hot(d2['y'].flat),
              'entropyY': np.log(2)}
     return data    
 

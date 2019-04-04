@@ -4,7 +4,8 @@ import entropy
 ds = tf.contrib.distributions
 
 class Net(object):
-    def __init__(self, input_dims, encoder_arch, decoder_arch, err_func, entropyY, trainable_noisevar = True, noisevar = 0.):
+    def __init__(self, input_dims, encoder_arch, decoder_arch, err_func, entropyY, trainable_noisevar = True, 
+                 noisevar = 0., kdewidth=-5):
         hiddenD       = encoder_arch[-1][0]  # bottleneck layer dimensionality
 
         self.x        = tf.placeholder(dtype=tf.float32, name='X', shape=[None, input_dims])           # inputs
@@ -42,7 +43,7 @@ class Net(object):
         
         
         # eta is the kernel width for fitting the GMM, in softplus space
-        self.eta      = tf.get_variable('eta', dtype=tf.float32, trainable=False, initializer=-5.)
+        self.eta      = tf.get_variable('eta', dtype=tf.float32, trainable=False, initializer=kdewidth)
         self.etavar   = tf.nn.softplus(self.eta)
         # placeholder to speed up scipy optimizer
         self.distance_matrix_ph = tf.placeholder(dtype=tf.float32, shape=[None, None]) 

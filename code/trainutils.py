@@ -74,7 +74,7 @@ def train(sess, saver, mode, beta, cfg, data, n, optimizer, report_every, savedi
     trainstep = optimizer.minimize(loss, var_list=var_list)
     sess.run(tf.variables_initializer(optimizer.variables()))
 
-    cdata = stats(sess, mode, beta, loss, 0, data, n, do_print=False)
+    cdata = stats(sess, mode, beta, loss, 0, data, n, do_print=True)
     saved_data.append(cdata)
     write_data(savedir, 0, sess, saver, [cfg, saved_data])
 
@@ -87,11 +87,13 @@ def train(sess, saver, mode, beta, cfg, data, n, optimizer, report_every, savedi
         x_batch, y_batch, dmatrix = None, None, None
 
         if mode != 'ce':
-            # Set kernel width
             x_batch = train_X[:n_noisevar_batch]
             y_batch = train_Y[:n_noisevar_batch]
-            dmatrix = sess.run(n.distance_matrix, feed_dict={n.x: x_batch})
-            n.eta_optimizer.minimize(sess, feed_dict={n.distance_matrix_ph: dmatrix})
+            
+            if cfg['train_kdewidth']:
+                # Set kernel width
+                dmatrix = sess.run(n.distance_matrix, feed_dict={n.x: x_batch})
+                n.eta_optimizer.minimize(sess, feed_dict={n.distance_matrix_ph: dmatrix})
 
             # Set noise variance with scipy, if needed
             if (fit_var and epoch == 0) or (cfg['train_noisevar']=='scipy' and epoch % 30 == 0):
