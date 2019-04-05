@@ -1,9 +1,20 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 import numpy as np
 import entropy
 ds = tf.contrib.distributions
 
+
 class Net(object):
+    
+    def get_noisevar_optimizer(self, loss):
+        return tf.contrib.opt.ScipyOptimizerInterface(loss, var_list=[self.phi])
+        # return tfp.optimizer.bfgs_minimize(loss, var_list=[self.phi,])
+    
+    def get_kdewidth_optimizer(self, loss):
+        return tf.contrib.opt.ScipyOptimizerInterface(loss, var_list=[self.eta])
+        # return tfp.optimizer.bfgs_minimize(loss, var_list=[self.eta,])
+    
     def __init__(self, input_dims, encoder_arch, decoder_arch, err_func, entropyY, trainable_noisevar = True, 
                  noisevar = 0., kdewidth=-5):
         hiddenD       = encoder_arch[-1][0]  # bottleneck layer dimensionality
@@ -19,6 +30,8 @@ class Net(object):
         else:
             self.phi  = tf.get_variable('phi', dtype=tf.float32, trainable=False, initializer=init_phi)
         self.noisevar = tf.nn.softplus(self.phi)
+        
+        # Only used if fitting noise variance with outer optimization loop, not SGD batches
         
         
         # START building the neural network
@@ -45,12 +58,12 @@ class Net(object):
         # eta is the kernel width for fitting the GMM, in softplus space
         self.eta      = tf.get_variable('eta', dtype=tf.float32, trainable=False, initializer=kdewidth)
         self.etavar   = tf.nn.softplus(self.eta)
-        # placeholder to speed up scipy optimizer
-        self.distance_matrix_ph = tf.placeholder(dtype=tf.float32, shape=[None, None]) 
+        # # placeholder to speed up scipy optimizer
+        # self.distance_matrix_ph = tf.placeholder(dtype=tf.float32, shape=[None, None]) 
         # negative log-likelihood for the 'width' of the GMM
-        self.neg_llh_eta        = entropy.GMM_negative_LLH(self.distance_matrix_ph, self.etavar, hiddenD)   
-        self.eta_optimizer      = tf.contrib.opt.ScipyOptimizerInterface(self.neg_llh_eta, var_list=[self.eta])
-
+        self.neg_llh_eta        = entropy.GMM_negative_LLH(self.distance_matrix, self.etavar, hiddenD)   
+        self.eta_optimizer      = self.get_kdewidth_optimizer(self.neg_llh_eta)
+        
         
         if err_func == 'softmax_ce':
             f = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.y, logits=self.predY)

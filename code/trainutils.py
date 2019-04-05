@@ -1,8 +1,8 @@
 import numpy as np
-import os, pickle
+import os, pickle, time
 import tensorflow as tf
 
-def stats(sess, mode, beta, loss, epoch, data, n, do_print=False):
+def stats(sess, mode, beta, loss, epoch, data, n, start_time=None, do_print=False):
     noisevar, etavar = sess.run([n.noisevar, n.etavar])
 
     measures = {'ce': n.cross_entropy, 'loss': loss, 'acc': n.accuracy, 
@@ -23,7 +23,13 @@ def stats(sess, mode, beta, loss, epoch, data, n, do_print=False):
             
     if do_print:
         print()
-        print('mode: %s epoch: %d | beta: %0.4f | noisevar: %g | kw: %g' % (mode, epoch, beta, noisevar, etavar))
+        if epoch > 0 and start_time is not None:
+            time_per_epoch = '%0.3f' % ((time.time() - start_time) / epoch)
+        else:
+            time_per_epoch = '-'
+            
+        print('mode: %s epoch: %d | beta: %0.4f | noisevar: %g | kw: %g | time/epoch: %s' 
+               % (mode, epoch, beta, noisevar, etavar, time_per_epoch))
         for mlist in [['ce','acc', 'loss'], ['Ixt', 'Ixt_lb', 'vIxt', 'Iyt']]:
             for m in mlist:
                 print("%s: % 0.3f/% 0.3f | " % (m, cdata['trn'][m], cdata['tst'][m]), end="")
@@ -70,14 +76,16 @@ def train(sess, saver, mode, beta, cfg, data, n, optimizer, report_every, savedi
     else:
         raise Exception('Unknown mode')  
 
-
-    trainstep = optimizer.minimize(loss, var_list=var_list)
+    trainstep  = optimizer.minimize(loss, var_list=var_list)
     sess.run(tf.variables_initializer(optimizer.variables()))
 
     cdata = stats(sess, mode, beta, loss, 0, data, n, do_print=True)
     saved_data.append(cdata)
     write_data(savedir, 0, sess, saver, [cfg, saved_data])
 
+    noisevar_optimizer = None
+    
+    start_time = time.time()
     for epoch in range(cfg['n_epochs']):
         # randomize order of training data
         permutation  = np.random.permutation(len(data['trn_Y']))
@@ -87,18 +95,22 @@ def train(sess, saver, mode, beta, cfg, data, n, optimizer, report_every, savedi
         x_batch, y_batch, dmatrix = None, None, None
 
         if mode != 'ce':
-            x_batch = train_X[:n_noisevar_batch]
-            y_batch = train_Y[:n_noisevar_batch]
             
-            if cfg['train_kdewidth']:
-                # Set kernel width
-                dmatrix = sess.run(n.distance_matrix, feed_dict={n.x: x_batch})
-                n.eta_optimizer.minimize(sess, feed_dict={n.distance_matrix_ph: dmatrix})
+            train_kdewidth = cfg['train_kdewidth']
+            train_noisevar = (fit_var and epoch == 0) or (cfg['train_noisevar']=='optimizer') #  and epoch % 30 == 0)
+            
+            if train_kdewidth or train_noisevar:
+                x_batch = train_X[:n_noisevar_batch]
+                y_batch = train_Y[:n_noisevar_batch]
+                #dmatrix = sess.run(n.distance_matrix, feed_dict={n.x: x_batch})
+            
+            if train_kdewidth: # Set kernel width
+                n.eta_optimizer.minimize(sess, feed_dict={n.x: x_batch}) # feed_dict={n.distance_matrix: dmatrix})
 
-            # Set noise variance with scipy, if needed
-            if (fit_var and epoch == 0) or (cfg['train_noisevar']=='scipy' and epoch % 30 == 0):
-                opt = tf.contrib.opt.ScipyOptimizerInterface(loss, var_list=[n.phi])
-                opt.minimize(sess, feed_dict={n.x: x_batch, n.y: y_batch})
+            if train_noisevar: # Set noise variance with an external optimizer
+                if noisevar_optimizer is None:
+                    noisevar_optimizer = n.get_noisevar_optimizer(loss)
+                noisevar_optimizer.minimize(sess, feed_dict={n.x: x_batch, n.y: y_batch})# , n.distance_matrix: dmatrix})
 
 
         for batch in range(n_mini_batches):
@@ -108,7 +120,7 @@ def train(sess, saver, mode, beta, cfg, data, n, optimizer, report_every, savedi
             cparams = {n.x: x_batch, n.y: y_batch}
             sess.run(trainstep, feed_dict=cparams)
 
-        cdata = stats(sess, mode, beta, loss, epoch+1, data, n, do_print=epoch % report_every == 0)
+        cdata = stats(sess, mode, beta, loss, epoch+1, data, n, start_time=start_time, do_print=epoch % report_every == 0)
         saved_data.append(cdata)
         write_data(savedir, epoch+1, sess, saver, [cfg, saved_data])
 
