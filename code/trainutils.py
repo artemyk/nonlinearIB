@@ -46,6 +46,7 @@ def write_data(savedir, epoch, sess, saver, data):
 
 def train(sess, saver, mode, beta, cfg, data, n, optimizer, report_every, savedir, fit_var=False):
     # sess         : TensorFlow session
+    # saver        : tf.train.Saver object
     # mode         : 'ce' (cross-entropy), 'nlIB' (MoG estimator), or 'VIB' (variational IB)
     # beta         : beta value
     # cfg          : configuration dictionary
