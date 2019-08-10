@@ -18,13 +18,13 @@ def one_hot(x, n_classes=None):
 def load_mnist(n_data=None):
     (train_data, train_labels), (test_data, test_labels) = tf.keras.datasets.mnist.load_data()
 
-    # randomize order
-    permutation = np.random.permutation(len(train_labels))
-    train_data = train_data[permutation]
-    train_labels = train_labels[permutation]
-    permutation = np.random.permutation(len(test_labels))
-    test_data = test_data[permutation]
-    test_labels = test_labels[permutation]
+#     # randomize order
+#     permutation = np.random.permutation(len(train_labels))
+#     train_data = train_data[permutation]
+#     train_labels = train_labels[permutation]
+#     permutation = np.random.permutation(len(test_labels))
+#     test_data = test_data[permutation]
+#     test_labels = test_labels[permutation]
 
     # normalize, reshape, and convert to one-hot vectors
     train_data = np.reshape(train_data, (-1, 784)) / (255./2.) - 1.
