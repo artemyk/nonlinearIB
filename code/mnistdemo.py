@@ -2,6 +2,8 @@
 # to the MNIST dataset.  Importantly, we use two stage training: we first train the network
 # to have good predition (no compression term), we then train while penalizing compression
 
+from __future__ import print_function
+
 import numpy as np
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
