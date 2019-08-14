@@ -2,9 +2,7 @@
 
 import numpy as np
 import tensorflow as tf
-from randomgen import RandomGenerator, MT19937
 import scipy
-rnd = RandomGenerator(MT19937())
 
 
 def gaussian_entropy(d, var):
@@ -67,18 +65,6 @@ def pairwise_distance2_np(x, x2):
     x2x = np.sum(x2**2, axis=1)[:,None]
     dist = xx + x2x.T - 2.0 * x.dot(x2.T)
     return dist
-
-
-def get_mc_entropy(mx, var):
-    n, d     = mx.shape
-    mx2 = mx + rnd.standard_normal(mx.shape, dtype=np.float32)*np.sqrt(var)
-
-    dist_norm = pairwise_distance2_np(mx, mx2) / (-2.0 * var)  
-    
-    const     =  - 0.5  * d * np.log(2.0 * np.pi * var) - np.log(n)
-    logprobs  = const + scipy.special.logsumexp(dist_norm , axis=0) 
-
-    return -np.mean(logprobs)
 
 
 def get_gib_curve(covXY, xdims):
