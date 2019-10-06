@@ -1,6 +1,23 @@
 import time, os, pickle
 import numpy as np
 import tensorflow as tf
+import signal
+import logging
+
+class DelayedKeyboardInterrupt(object):
+    def __enter__(self):
+        self.signal_received = False
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, sig, frame):
+        self.signal_received = (sig, frame)
+        logging.debug('SIGINT received. Delaying KeyboardInterrupt.')
+
+    def __exit__(self, type, value, traceback):
+        signal.signal(signal.SIGINT, self.old_handler)
+        if self.signal_received:
+            self.old_handler(*self.signal_received)
+
 
 def train(sess, mode, beta, cfg, data, net, savedir, optimization_callback=None, fit_var=False):
     # TODO : document
@@ -16,11 +33,12 @@ def train(sess, mode, beta, cfg, data, net, savedir, optimization_callback=None,
     # fit_var      : whether to initially fit noisevariance or not
 
     def write_data(epoch, saveobjs):
-        if not os.path.exists(savedir):
-            os.makedirs(savedir)
-        with open(savedir + '/data', 'wb') as fp:
-            pickle.dump(saveobjs, fp)
-        saver.save(sess, savedir + '/tf_model', global_step=epoch)
+        with DelayedKeyboardInterrupt():
+            if not os.path.exists(savedir):
+                os.makedirs(savedir)
+            with open(savedir + '/data', 'wb') as fp:
+                pickle.dump(saveobjs, fp)
+            saver.save(sess, savedir + '/tf_model', global_step=epoch)
 
     
     def report(epoch, do_print=False):
@@ -109,5 +127,6 @@ def train(sess, mode, beta, cfg, data, net, savedir, optimization_callback=None,
         cdata = report(epoch+1, epoch % cfg['report_every'] == 0)
         saved_data.append(cdata)
         write_data(epoch+1, [cfg, saved_data])
-
+        
+        
     return saved_data

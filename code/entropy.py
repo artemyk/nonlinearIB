@@ -4,6 +4,8 @@ import numpy as np
 import tensorflow as tf
 import scipy
 
+def entropy(ps):
+    return -np.sum([p*np.log(p) for p in ps if not np.isclose(p,0)])
 
 def gaussian_entropy(d, var):
     # Entropy of a Gaussian distribution with 'd' dimensions and log variance 'log_var'
@@ -54,13 +56,19 @@ def GMM_negative_LLH(dist, var, d):
 
 
 def pairwise_distance(x):
-    # returns a matrix where each element is the distance between each pair of rows in x
+    # returns a matrix where each element is the squared distance between each pair of rows in x
+    
+    # tensorflow reduce_sum can be really inaccurate. let's convert to float64
+    x = tf.cast(x, tf.float64)
     xx = tf.reduce_sum(tf.square(x), 1, keepdims=True)
     dist = xx - 2.0 * tf.matmul(x, tf.transpose(x)) + tf.transpose(xx)
-    return dist
+    
+    dist = tf.nn.relu(dist)  # turn negative numbers into 0 (we only get negatives due to numerical errors)
+
+    return tf.cast(dist, tf.float32)
 
 def pairwise_distance2_np(x, x2):
-    # returns a matrix where each element is the distance between each pair of rows in x and x2
+    # returns a matrix where each element is the squared distance between each pair of rows in x and x2
     xx = np.sum(x**2, axis=1)[:,None]
     x2x = np.sum(x2**2, axis=1)[:,None]
     dist = xx + x2x.T - 2.0 * x.dot(x2.T)
