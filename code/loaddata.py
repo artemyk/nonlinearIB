@@ -16,8 +16,32 @@ def one_hot(x, n_classes=None):
     return x_one_hot
 
 
-def load_mnist(n_data=None):
-    (train_data, train_labels), (test_data, test_labels) = tf.keras.datasets.mnist.load_data()
+def load_housing():
+    from sklearn.datasets import fetch_california_housing
+    d=fetch_california_housing()
+    d['data'] -= d['data'].mean(axis=0)
+    d['data'] /= d['data'].std(axis=0)
+    
+    np.random.seed(12345)
+    permutation = np.random.permutation(len(d['data']))
+    d['data']   = d['data'][permutation]
+    d['target'] = d['target'][permutation]
+    
+    l = int(len(d['data'])*0.8)
+    
+    data = {'err':'mse',
+            'trn_X': d['data'][:l],
+            'trn_Y': np.atleast_2d(d['target'][:l]).T,
+            'tst_X': d['data'][l:],
+            'tst_Y': np.atleast_2d(d['target'][l:]).T,
+           }
+    data['trn_entropyY'] = 0.
+    data['tst_entropyY'] = 0.
+    return data
+
+def load_mnist(n_data=None, fashion_mnist=False):
+    method = tf.keras.datasets.mnist if not fashion_mnist else tf.keras.datasets.fashion_mnist
+    (train_data, train_labels), (test_data, test_labels) = method.load_data()
 
 #     # randomize order
 #     permutation = np.random.permutation(len(train_labels))
@@ -42,6 +66,7 @@ def load_mnist(n_data=None):
 
     data['trn_entropyY'] = np.log(10)
     data['tst_entropyY'] = np.log(10)
+    data['err'] = 'ce'
     return data
 
 def load_delicious():
@@ -60,6 +85,7 @@ def load_delicious():
             data[mode+'_Y'] = Y
             data[mode+'_entropyY'] = entropy(Y.mean(axis=0))
 
+    data['err'] = 'ce'
     return data
 
 # def load_wine():
@@ -129,6 +155,7 @@ def load_wine():
     data['trn_entropyY'] = entropy(data['trn_Y'].mean(axis=0))
     data['tst_entropyY'] = entropy(data['tst_Y'].mean(axis=0))
     
+    data['err'] = 'ce'
     return data
 
 
@@ -141,11 +168,16 @@ def load_szt():
     data = { 'trn_X' : d1['F'].astype('float32'), 'trn_Y': one_hot(d1['y'].flat),
              'tst_X' : d2['F'].astype('float32'), 'tst_Y': one_hot(d2['y'].flat),
              'entropyY': np.log(2)}
+    data['err'] = 'ce'
     return data    
 
-def load_data(runtype):
+def load_data(runtype, validation=False):
     if runtype == 'MNIST':
         data = load_mnist()
+    elif runtype == 'FashionMNIST':
+        data = load_mnist(fashion_mnist=True)
+    elif runtype == 'Housing':
+        data = load_housing()
     elif runtype == 'Delicious':
         data = load_delicious()
     elif runtype == 'Wine':
@@ -163,12 +195,32 @@ def load_data(runtype):
         data['trn_entropyY'] = 0.5 * np.log(np.linalg.det(2*np.pi*np.exp(1)*trn_labelcov))
         tst_labelcov = np.cov(data['tst_Y'].T)
         data['tst_entropyY'] = 0.5 * np.log(np.linalg.det(2*np.pi*np.exp(1)*tst_labelcov))
+        data['err'] = 'mse'
     else:
         raise Exception('unknown runtype')
     
     for k in ['trn_X','trn_Y','tst_X','tst_Y']:
         data[k] = data[k].astype(np.float32)
         
+    if validation:
+        cutoff = int(0.8*len(data['trn_X']))
+        np.random.seed(12345)
+        permutation = np.random.permutation(len(data['trn_X']))
+        dX = data['trn_X'][permutation]
+        dY = data['trn_Y'][permutation]
+        data['trn_X'] = dX[:cutoff]
+        data['trn_Y'] = dY[:cutoff]
+        data['val_X'] = dX[cutoff:]
+        data['val_Y'] = dY[cutoff:]
+            
+#     train_data = train_data[permutation]
+#     train_labels = train_labels[permutation]
+#     permutation = np.random.permutation(len(test_labels))
+#     test_data = test_data[permutation]
+#     test_labels = test_labels[permutation]
+        
+    data['runtype'] = runtype
+    
     return data
     
 
