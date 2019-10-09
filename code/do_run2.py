@@ -4,29 +4,36 @@ import pathlib, os, pickle, time, argparse
 
 cfg = {}
 cfg['n_batch']           = 128
-cfg['n_noisevar_batch']  = 2000 
+# cfg['n_noisevar_batch']  = 2000  !!!
 cfg['report_every']      = 10
-cfg['n_wide']            = 128
 cfg['encoder_layers']    = 2
+
 
 do_pretrain  = False
 max_epochs   = 1000  # max epochs (earlystopping will typically kick in much earlier)
-betavals     = 10**np.linspace(-4, 0.1, 20, endpoint=True) 
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-squaredIB", help="Use I(Y:T) - beta*I(X:T)^2 objective function?", action="store_true")
 parser.add_argument("-n_runs"   , help="How many runs to do", default=1, type=int)
 parser.add_argument("-n_hidden" , help="How many neurons in bottleneck layer", default=5, type=int)
+parser.add_argument("-n_wide"   , help="How many neurons in encoding/decoding layers", default=128, type=int)
+parser.add_argument("-beta_min" , help="Min beta value", default=0.001, type=float)
+parser.add_argument("-beta_max" , help="Max beta value", default=2, type=float)
+parser.add_argument("-beta_npoints", help="Number beta values to sweep", default=20, type=int)
 parser.add_argument("-early_stopping_patience", default=10, type=int,
                                   help="How many epochs before validation improvement for early stoppoing")
 parser.add_argument('runtype',    help="Which dataset", choices=['MNIST','FashionMNIST','Housing','Wine'])
 parser.add_argument('outputdir',  help="Where to store output files", type=str)
 
 args = parser.parse_args()
-for k in ['squaredIB', 'n_runs', 'n_hidden', 'early_stopping_patience','runtype']: 
+for k in ['squaredIB', 'n_runs', 'n_hidden', 'n_wide', 'early_stopping_patience',
+          'beta_min','beta_max', 'beta_npoints',
+          'runtype']: 
     cfg[k] = getattr(args, k)
 
+betavals     = np.geomspace(cfg['beta_min'], cfg['beta_max'], cfg['beta_npoints'], endpoint=True) 
+    
 savedirbase  = str(pathlib.Path().absolute()) + '/' + args.outputdir + '/'
 savedir = savedirbase + cfg['runtype'] 
 
@@ -41,9 +48,16 @@ tfconfig = tf.ConfigProto()
 tfconfig.gpu_options.allow_growth=True
 
 import loaddata, iblayer, utils
-from trainutils import error
 
+def error(errtype, y_true, y_pred): 
+    if errtype == 'ce':
+        return tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred)
+    elif errtype == 'mse':
+        return (y_true - y_pred)**2
+    else:
+        raise Exception('Unknown errtype', errtype)
 
+        
 def train(sess, mode, beta, n_epochs, cfg, data, net, savedir):
     # sess         : TensorFlow session
     # mode         : 'ce' (cross-entropy only), 'nlIB' (MoG estimator), or 'VIB' (variational IB)
@@ -106,12 +120,11 @@ def train(sess, mode, beta, n_epochs, cfg, data, net, savedir):
     
     
     print("*** Saving to %s ***" % savedir)
-    saver = tf.train.Saver(max_to_keep=30)
+    saver = tf.train.Saver(max_to_keep=cfg['early_stopping_patience']+5)
     
     optimizer      = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999) 
     
     n_batch          = cfg['n_batch']
-    n_noisevar_batch = cfg['n_noisevar_batch']
     saved_data       = []
     n_mini_batches   = int(np.ceil(len(data['trn_Y']) / n_batch))
     
@@ -119,7 +132,7 @@ def train(sess, mode, beta, n_epochs, cfg, data, net, savedir):
     var_list = None
     Iyt      = data['trn_entropyY'] - net.cross_entropy
     
-    Ixt  = net.iblayerobj.Ixt if mode != 'VIB' else net.iblayerobj.vIxt
+    Ixt  = net.iblayerobj.Ixt if mode == 'nlIB' else net.iblayerobj.vIxt
     loss = get_loss(net.cross_entropy, Ixt, Iyt)
     
     if mode == 'ce': # minimize cross-entropy only, do not change noise variance parameter
@@ -137,34 +150,6 @@ def train(sess, mode, beta, n_epochs, cfg, data, net, savedir):
     permutation  = np.random.permutation(len(data['trn_Y']))
     train_X = data['trn_X'][permutation]
     train_Y = data['trn_Y'][permutation]
-    if mode in ['VIB', 'nlIB']:
-        # DOCUMENT
-        cparams = {net.inputs: train_X[0:100], net.true_outputs: train_Y[0:100]}
-        #noise = sess.run(net.iblayerobj.noise, feed_dict=cparams)
-        #cparams_withnoise = {net.inputs: x_batch, net.true_outputs: y_batch, net.iblayerobj.noise: noise}
-        dist_matrix = sess.run(net.iblayerobj.dist_matrix, feed_dict=cparams)
-        max_dist    = np.sqrt(dist_matrix.max())
-        if np.isnan(max_dist) or np.isclose(max_dist, 0):
-            max_dist = 0.01
-
-        x_batch = train_X[0:cfg['n_noisevar_batch']]
-        y_batch = train_Y[0:cfg['n_noisevar_batch']]
-        noise = sess.run(net.iblayerobj.noise, feed_dict={net.inputs: x_batch, net.true_outputs: y_batch})
-        minloss, bestphi = None, None
-        for noisevar in np.geomspace(1e-10, max_dist, 100):
-            cur_phi   = utils.softplusinverse(noisevar)
-            feed_dict = {net.inputs: x_batch, net.true_outputs: y_batch, 
-                         net.iblayerobj.noise: noise, net.iblayerobj.phi: cur_phi}
-            lossval   = sess.run(loss, feed_dict=feed_dict)
-
-            lossval   = np.round(lossval, 2) # !DOCUMENT! for stability
-
-            #!DOCUMENT! note the lossval <= minloss --- we choose largest allowable
-            if not np.isnan(lossval) and (minloss is None or lossval <= minloss):
-                minloss = lossval
-                bestphi = cur_phi
-
-        sess.run(net.iblayerobj.phi.assign(bestphi))
         
     last_val_increase_epoch = 0
     last_best_val           = None
@@ -180,9 +165,40 @@ def train(sess, mode, beta, n_epochs, cfg, data, net, savedir):
         train_Y = data['trn_Y'][permutation]
 
         for batch in range(n_mini_batches): # sample mini-batch
+            
             x_batch = train_X[batch * n_batch:(1 + batch) * n_batch]
             y_batch = train_Y[batch * n_batch:(1 + batch) * n_batch]
             cparams = {net.inputs: x_batch, net.true_outputs: y_batch}
+            
+            if epoch == 0 and batch == 0 and mode in ['VIB', 'nlIB']:
+                # Initialize noisevariance to a good initial value
+                
+                # cparams = {net.inputs: train_X[0:100], net.true_outputs: train_Y[0:100]}
+                dist_matrix = sess.run(net.iblayerobj.dist_matrix, feed_dict=cparams)
+                max_dist    = np.sqrt(dist_matrix.max())
+                if np.isnan(max_dist) or np.isclose(max_dist, 0):
+                    max_dist = 1e-8
+
+                #x_batch = train_X[0:cfg['n_noisevar_batch']]  !!!!
+                #y_batch = train_Y[0:cfg['n_noisevar_batch']]  !!!!
+                noise = sess.run(net.iblayerobj.noise, feed_dict={net.inputs: x_batch, net.true_outputs: y_batch})
+                minloss, bestphi = None, None
+                for noisevar in np.geomspace(1e-10, max_dist, 100):
+                    cur_phi   = utils.softplusinverse(noisevar)
+                    feed_dict = {net.inputs: x_batch, net.true_outputs: y_batch, 
+                                 net.iblayerobj.noise: noise, net.iblayerobj.phi: cur_phi}
+                    lossval   = sess.run(loss, feed_dict=feed_dict)
+
+                    lossval   = np.round(lossval, 2) # !DOCUMENT! for stability
+
+                    #!DOCUMENT! note the lossval <= minloss --- we choose largest allowable
+                    if not np.isnan(lossval) and (minloss is None or lossval <= minloss):
+                        minloss = lossval
+                        bestphi = cur_phi
+
+                sess.run(net.iblayerobj.phi.assign(bestphi))
+                
+            
             sess.run(trainstep, feed_dict=cparams)
         
         cdata = report(epoch+1, epoch % cfg['report_every'] == 0)
@@ -197,11 +213,11 @@ def train(sess, mode, beta, n_epochs, cfg, data, net, savedir):
 
 
 class Network(object):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, init_noisevar):
         self.input_dim      = input_dim
         self.output_dim     = output_dim
         
-        self.iblayerobj     = iblayer.NoisyIBLayer(init_noisevar=1e-15)  # , init_kdewidth=-20)
+        self.iblayerobj     = iblayer.NoisyIBLayer(init_noisevar)
         
         self.true_outputs   = tf.placeholder(tf.float32, [None,output_dim,], name='true_outputs')
 
@@ -217,6 +233,7 @@ class Network(object):
 
         self.inputs         = self.layers[0]
         self.predictions    = self.layers[-1]
+        self._predictions_id = tf.identity(self.predictions, name='Y') # useful for finding later
 
         f                   = error(errtype=data['err'], y_true=self.true_outputs, y_pred=self.predictions)
         self.cross_entropy  = tf.reduce_mean(f) # cross entropy
@@ -229,14 +246,14 @@ data           = loaddata.load_data(cfg['runtype'], validation=True)
 input_dim      = data['trn_X'].shape[1]
 output_dim     = data['trn_Y'].shape[1]
 
-if do_pretrain or not os.path.exists(savedir+'/basemodel'):
+if (do_pretrain or not os.path.exists(savedir+'/basemodel')):
     if not os.path.exists(savedir+'/basemodel'):
         print('%s doesnt exist --- creating basemodel' % (savedir+'/basemodel'))
     # Train the base model, without compression
     tf.reset_default_graph()
     with tf.Session(config=tfconfig) as sess:
         print("Making base model")
-        n = Network(input_dim, output_dim)
+        n = Network(input_dim, output_dim, init_noisevar = 1e-15)
         sess.run(tf.global_variables_initializer())
         train(sess, mode='ce', beta=0.0, n_epochs=max_epochs,
               net=n, cfg=cfg, data=data, savedir=savedir+'/basemodel')
@@ -248,13 +265,19 @@ for runndx in range(cfg['n_runs']):
     for beta in betavals:
         if np.isclose(beta, 0):
             continue
-        for mode in ['nlIB', 'VIB']:
+        for mode in ['nlIB', 'VIB',]:
+            # mode can also be set to 'VIBraw', which does single-stage VIB training
             tf.reset_default_graph()
             with tf.Session(config=tfconfig) as sess:
-                n = Network(input_dim, output_dim)
+                init_noisevar = 1e-15
+                if mode == 'VIBraw':
+                    init_noisevar = 0.01
+                n = Network(input_dim, output_dim, init_noisevar)
 
                 sess.run(tf.global_variables_initializer())
-                tf.train.Saver().restore(sess, tf.train.latest_checkpoint(savedir+'/basemodel'))
+                
+                if mode != 'VIBraw':
+                    tf.train.Saver().restore(sess, tf.train.latest_checkpoint(savedir+'/basemodel'))
 
                 sqmode = 'sq'  if cfg['squaredIB'] else 'reg'
                 savename = savedir + '/results-%s-%0.5f-%s-run%d' % (mode, beta, sqmode, runndx)

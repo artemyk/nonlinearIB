@@ -2,7 +2,24 @@ import tensorflow as tf
 import numpy as np
 import scipy.io
 import pickle
-from entropy import entropy
+import entropy
+import scipy.stats
+
+def set_Y_entropy(data):
+    for r in ['trn','tst']:
+        Y = data[r + '_Y']
+        if data['err'] == 'ce':
+            v = entropy.entropy(Y.mean(axis=0))
+        elif data['err'] == 'mse':
+            #hist = np.histogram(Y, bins=100)
+            #v = scipy.stats.rv_histogram(hist).entropy()
+            if Y.shape[1] != 1: # only 1-d continuous output supported right now
+                raise Exception()
+            v = entropy.gaussian_entropy_np(1, np.var(Y))
+        else:
+            raise Exception('Unknown error func')
+        data[r+'_entropyY'] = v
+    return data        
 
 def one_hot(x, n_classes=None):
     assert(np.array(x).ndim == 1)
@@ -22,6 +39,12 @@ def load_housing():
     d['data'] -= d['data'].mean(axis=0)
     d['data'] /= d['data'].std(axis=0)
     
+    # Housing prices above 5 are all collapsed to 5, which makes the Y distribution very strange. Drop these
+    d['data']   = d['data'][d['target'] < 5]
+    d['target'] = d['target'][d['target'] < 5]
+    
+    d['target'] = np.log(d['target'])
+    
     np.random.seed(12345)
     permutation = np.random.permutation(len(d['data']))
     d['data']   = d['data'][permutation]
@@ -35,8 +58,7 @@ def load_housing():
             'tst_X': d['data'][l:],
             'tst_Y': np.atleast_2d(d['target'][l:]).T,
            }
-    data['trn_entropyY'] = 0.
-    data['tst_entropyY'] = 0.
+    
     return data
 
 def load_mnist(n_data=None, fashion_mnist=False):
@@ -64,8 +86,8 @@ def load_mnist(n_data=None, fashion_mnist=False):
         data = {'trn_X': train_data, 'trn_Y': train_labels, 
                 'tst_X': test_data , 'tst_Y': test_labels}
 
-    data['trn_entropyY'] = np.log(10)
-    data['tst_entropyY'] = np.log(10)
+    #data['trn_entropyY'] = np.log(10)
+    #data['tst_entropyY'] = np.log(10)
     data['err'] = 'ce'
     return data
 
@@ -83,7 +105,6 @@ def load_delicious():
             Y = pred[good_ix,:]
             Y = Y / Y.sum(axis=1)[:,None]
             data[mode+'_Y'] = Y
-            data[mode+'_entropyY'] = entropy(Y.mean(axis=0))
 
     data['err'] = 'ce'
     return data
@@ -152,8 +173,8 @@ def load_wine():
     #print(Y)
     data = { 'trn_X' : X[:hl,:], 'trn_Y': Y[:hl,:],
              'tst_X' : X[hl:,:], 'tst_Y': Y[hl:,:]}
-    data['trn_entropyY'] = entropy(data['trn_Y'].mean(axis=0))
-    data['tst_entropyY'] = entropy(data['tst_Y'].mean(axis=0))
+    #data['trn_entropyY'] = entropy.entropy(data['trn_Y'].mean(axis=0))
+    #data['tst_entropyY'] = entropy.entropy(data['tst_Y'].mean(axis=0))
     
     data['err'] = 'ce'
     return data
@@ -219,6 +240,7 @@ def load_data(runtype, validation=False):
 #     test_data = test_data[permutation]
 #     test_labels = test_labels[permutation]
         
+    data = set_Y_entropy(data)
     data['runtype'] = runtype
     
     return data

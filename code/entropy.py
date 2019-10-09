@@ -40,23 +40,9 @@ def GMM_entropy(dist, var, d, bound='upper'):
     return h
 
 
-def GMM_negative_LLH(dist, var, d):
-    # computes the leave-one-out log likelihood of the log variance of a homoscedastic GMM
-    # dist: a matrix of pairwise distances (tf.placeholder)
-    # log_var: the log variance of a GMM (tf.variable)
-    # d: number of dimensions
-    # n: number of data points
-    n = tf.cast(tf.shape(dist)[0], tf.float32)
-    # var = tf.exp(log_var) + 1e-10
-
-    dist_norm = -(dist + 1e10 * tf.eye(tf.cast(n, tf.int32))) / (2.0 * var)  # add a large number to the diagonal elements to implement 'leave-one-out'
-    const = -n * tf.log(n - 1) - 0.5 * n * d * tf.log(2.0 * np.pi * var)
-    llh = const + tf.reduce_sum(tf.reduce_logsumexp(dist_norm, 1))
-    return -llh
-
-
 def pairwise_distance(x):
     # returns a matrix where each element is the squared distance between each pair of rows in x
+    orig_dtype = x.dtype
     
     # these calculations are numerically sensitive, so let's convert to float64
     x = tf.cast(x, tf.float64)
@@ -64,9 +50,11 @@ def pairwise_distance(x):
     xx = tf.reduce_sum(tf.square(x), 1, keepdims=True)
     dist = xx - 2.0 * tf.matmul(x, tf.transpose(x)) + tf.transpose(xx)
     
+    dist = tf.cast(dist, orig_dtype)
+    
     dist = tf.nn.relu(dist)  # turn negative numbers into 0 (we only get negatives due to numerical errors)
 
-    return tf.cast(dist, tf.float32)
+    return dist
 
 def pairwise_distance2_np(x, x2):
     # these calculations are numerically sensitive, so let's convert to float64
