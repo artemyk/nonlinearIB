@@ -73,33 +73,3 @@ def pairwise_distance2_np(x, x2):
     dist[dist<0] = 0.0  # turn negative numbers into 0 (we only get negatives due to numerical errors)
     
     return dist
-
-def get_gib_curve(covXY, xdims):
-    # get optimal IB curve for gaussian variables
-    #http://www.jmlr.org/papers/volume6/chechik05a/chechik05a.pdf
-
-    covX = covXY[:xdims,:xdims]
-    covY = covXY[xdims:,xdims:]
-    covXgY = covX - covXY[:xdims,xdims:].dot(np.linalg.inv(covY)).dot(covXY[xdims:,:xdims])
-    mainMx = covXgY.dot(np.linalg.inv(covX))
-
-    evecs, evals = np.linalg.eig(mainMx)
-    #print(evecs.min(), evecs.max())
-    assert(np.all(evecs >= -1e-5) and np.all(evecs <= 1+1e-5))
-    ix = np.argsort(evecs)
-    sorted_evecs = np.real(evecs[ix])
-    sorted_evecs = sorted_evecs[np.logical_not(np.isclose(sorted_evecs, 1))]
-    
-
-    v1, v2 = [], []
-    for alpha in np.linspace(0., 1000, 1000):
-        #last_alpha = np.flatnonzero(alpha >= 1./(1.-sorted_evecs))[-1]
-        #print(last_alpha)
-
-        Itx = 0.5*np.sum([np.log(alpha*(1-l)/l) for l in sorted_evecs if alpha >= 1./(1.-l)])
-        Ity = Itx - 0.5*np.sum([np.log(alpha*(1-l)) for l in sorted_evecs if alpha >= 1./(1.-l)])
-
-        v1.append(Itx)
-        v2.append(Ity)
-        
-    return np.array(v1), np.array(v2)

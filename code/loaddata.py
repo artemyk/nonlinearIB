@@ -6,7 +6,7 @@ import entropy
 import scipy.stats
 
 def set_Y_entropy(data):
-    for r in ['trn','tst']:
+    for r in ['trn','val','tst']:
         Y = data[r + '_Y']
         if data['err'] == 'ce':
             v = entropy.entropy(Y.mean(axis=0))
