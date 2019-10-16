@@ -1,4 +1,4 @@
-# Script to generate nonlinearIB and VIB models for MNIST, FashionMNIST, and Housing datasets
+# Script to generate nonlinearIB and VIB models for MNIST, FashionMNIST, and California Housing datasets
 
 
 import numpy as np
