@@ -88,7 +88,7 @@ with tf.Session(config=tfconfig) as sess:
                                           "CE={trn_ce:6.3f}/{val_ce:6.3f}/{tst_ce:6.3f} " +
                                           "IB={trn_IB:5.3f}/{val_IB:5.3f}/{tst_IB:5.3f} ").format(**vals))
             
-        # Early stoppoing checks
+        # Early stopping checks
         if last_best_val is None or vals['val_IB'] >= last_best_val:
             last_val_increase_epoch = epoch
             last_best_val = vals['val_IB']
